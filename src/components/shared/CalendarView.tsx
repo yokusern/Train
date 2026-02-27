@@ -52,18 +52,6 @@ export default function CalendarView({ projects, activities }: CalendarViewProps
                                     {dayNum}
                                 </span>
                             </div>
-
-                            {/* デモ用のダミーイベント */}
-                            {dayNum === 27 && (
-                                <div className="bg-indigo-500/10 border-l-2 border-indigo-500 p-1.5 rounded-r-md">
-                                    <p className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 truncate">LPデザインFIX</p>
-                                </div>
-                            )}
-                            {dayNum === 28 && (
-                                <div className="bg-emerald-500/10 border-l-2 border-emerald-500 p-1.5 rounded-r-md">
-                                    <p className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 truncate">本番DB移行</p>
-                                </div>
-                            )}
                         </div>
                     );
                 })}

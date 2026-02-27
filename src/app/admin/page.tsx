@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import useSWR, { mutate } from 'swr';
 import Header from '../../components/shared/Header';
 import ProjectList from '../../components/shared/ProjectList';
 import ActivityLog from '../../components/shared/ActivityLog';
@@ -12,8 +11,7 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, TrendingUp, Users, Target, Layout, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const fetcher = (url: string) => fetch(url).then(res => res.json());
+import { loadProjects, saveProjects, addProject, addTask, updateTaskStatus } from '@/lib/projectStore';
 
 export default function AdminPage() {
     const router = useRouter();
@@ -25,6 +23,9 @@ export default function AdminPage() {
 
     const [activeTab, setActiveTab] = useState<TabId>('tasks');
     const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [projects, setProjects] = useState<Project[] | null>(null);
+    const [users, setUsers] = useState<User[]>([]);
+    const [newProjectName, setNewProjectName] = useState('');
 
     useEffect(() => {
         const saved = localStorage.getItem('train_user');
@@ -34,14 +35,14 @@ export default function AdminPage() {
                 router.push('/dashboard');
             } else {
                 setCurrentUser(user);
+                setProjects(loadProjects());
+                // 管理画面のランキング用に、現在ログイン中ユーザーのみ表示（将来拡張用）
+                setUsers([user]);
             }
         } else {
             router.push('/');
         }
     }, [router]);
-
-    const { data: projects, error: projectsError } = useSWR<Project[]>('/api/projects', fetcher);
-    const { data: users, error: usersError } = useSWR<User[]>('/api/users', fetcher);
 
     const [localChat, setLocalChat] = useState<ChatMessage[]>([]);
     const [isAILoading, setIsAILoading] = useState(false);
@@ -63,49 +64,25 @@ export default function AdminPage() {
         if (nextStatus === currentStatus) return;
 
         try {
-            await fetch('/api/tasks', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: taskId, status: nextStatus })
-            });
-
-            if (currentAssignee) {
-                await fetch('/api/activity', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        user_id: currentAssignee,
-                        project_id: projectId,
-                        action_type: actionType,
-                        target_id: taskId,
-                        points_earned: points,
-                        message: actionType === 'points_awarded' ? '完了を承認し、ポイントを付与しました' : 'タスクを完了としてマークしました'
-                    })
-                });
-            }
-
-            mutate('/api/projects');
-            mutate('/api/users');
+            setProjects(prev => (prev ? updateTaskStatus(prev, projectId, taskId, nextStatus, currentAssignee) : prev));
         } catch (err) {
             console.error('Admin task action error:', err);
         }
     };
 
     const handleCreateTask = async (projectId: number, title: string, points: number, assigneeId: number | null, category?: string) => {
-        try {
-            await fetch('/api/tasks', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ project_id: projectId, title, points, assignee_id: assigneeId, category })
-            });
-            mutate('/api/projects');
-        } catch (err) {
-            console.error('Create task error:', err);
-        }
+        setProjects(prev => (prev ? addTask(prev, projectId, title, points, assigneeId, category) : prev));
     };
 
-    if (projectsError || usersError) return <div className="p-8 text-center text-rose-500">管理者データの読み込みに失敗しました。</div>;
-    if (!projects || !users || !currentUser) return <div className="p-8 text-center text-slate-400">管理コンソールを同期中...</div>;
+    const handleCreateProject = () => {
+        const name = newProjectName.trim();
+        if (!name || !projects) return;
+        const next = addProject(projects, name, '📁');
+        setProjects(next);
+        setNewProjectName('');
+    };
+
+    if (!projects || !currentUser) return <div className="p-8 text-center text-slate-400">管理コンソールを同期中...</div>;
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-500">
@@ -136,6 +113,24 @@ export default function AdminPage() {
                             ))}
                         </div>
                     </motion.div>
+
+                    {/* プロジェクト追加フォーム */}
+                    <div className="flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 rounded-2xl p-4 shadow-sm">
+                        <input
+                            type="text"
+                            value={newProjectName}
+                            onChange={(e) => setNewProjectName(e.target.value)}
+                            placeholder="新しいプロジェクト名を入力..."
+                            className="flex-1 bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                        />
+                        <button
+                            onClick={handleCreateProject}
+                            disabled={!newProjectName.trim()}
+                            className="px-4 py-2 text-xs font-black uppercase tracking-widest rounded-xl bg-indigo-600 disabled:opacity-40 text-white hover:bg-indigo-500 transition-colors"
+                        >
+                            追加
+                        </button>
+                    </div>
 
                     {activeTab === 'tasks' ? (
                         <ProjectList

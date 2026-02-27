@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import useSWR, { mutate } from 'swr';
 import Header from '../../components/shared/Header';
 import ProjectList from '../../components/shared/ProjectList';
 import ActivityLog from '../../components/shared/ActivityLog';
@@ -12,9 +11,8 @@ import { TaskStatus, User, Project, ChatMessage, Activity } from '../../componen
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { loadProjects, updateTaskStatus } from '@/lib/projectStore';
 import { Sparkles, Layout, Calendar } from 'lucide-react';
-
-const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 export default function DashboardPage() {
     const router = useRouter();
@@ -26,18 +24,19 @@ export default function DashboardPage() {
 
     const [activeTab, setActiveTab] = useState<TabId>('tasks');
     const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [projects, setProjects] = useState<Project[] | null>(null);
 
     useEffect(() => {
         const saved = localStorage.getItem('train_user');
         if (saved) {
             setCurrentUser(JSON.parse(saved));
+            setProjects(loadProjects());
         } else {
             router.push('/');
         }
     }, [router]);
 
-    const { data: projects, error: projectsError } = useSWR<Project[]>('/api/projects', fetcher);
-    const { data: chatMessages = [] } = useSWR<ChatMessage[]>('/api/chat', fetcher, { refreshInterval: 5000 });
+    const [chatMessages] = useState<ChatMessage[]>([]);
 
     const [localChat, setLocalChat] = useState<ChatMessage[]>([]);
     const [isAILoading, setIsAILoading] = useState(false);
@@ -52,26 +51,7 @@ export default function DashboardPage() {
         if (nextStatus === currentStatus) return;
 
         try {
-            await fetch('/api/tasks', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: taskId, status: nextStatus, assignee_id: currentUser.id })
-            });
-
-            await fetch('/api/activity', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    user_id: currentUser.id,
-                    project_id: projectId,
-                    action_type: nextStatus === 'in_review' ? 'task_completed' : 'task_created',
-                    target_id: taskId,
-                    points_earned: nextStatus === 'in_review' ? points : 0,
-                    message: nextStatus === 'in_review' ? '完了報告を提出しました' : '作業を開始しました'
-                })
-            });
-
-            mutate('/api/projects');
+            setProjects(prev => (prev ? updateTaskStatus(prev, projectId, taskId, nextStatus, currentUser.id) : prev));
         } catch (err) {
             console.error('Task action error:', err);
         }
@@ -124,7 +104,6 @@ export default function DashboardPage() {
         }
     };
 
-    if (projectsError) return <div className="p-8 text-center text-rose-500">プロジェクトの読み込みに失敗しました。</div>;
     if (!projects || !currentUser) return <div className="p-8 text-center text-slate-400">環境を同期中...</div>;
 
     const allMessages = [...chatMessages, ...localChat];
