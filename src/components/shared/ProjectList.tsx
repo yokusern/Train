@@ -14,14 +14,10 @@ import {
     MoreVertical,
     Calendar,
     Tag,
-    Award
+    Award,
+    Play
 } from 'lucide-react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-    return twMerge(clsx(inputs));
-}
+import { cn } from '@/lib/utils';
 
 interface ProjectListProps {
     projects: Project[];
@@ -49,6 +45,15 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
             case 'in_progress': return <Clock className="w-4 h-4 text-indigo-500 animate-pulse" />;
             case 'in_review': return <AlertCircle className="w-4 h-4 text-amber-500" />;
             default: return <div className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-600" />;
+        }
+    };
+
+    const getStatusLabel = (status: TaskStatus) => {
+        switch (status) {
+            case 'done': return '完了済';
+            case 'in_progress': return '進行中';
+            case 'in_review': return '承認待';
+            default: return '未着手';
         }
     };
 
@@ -83,7 +88,7 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                 </div>
                                 <div>
                                     <h3 className="font-bold text-slate-900 dark:text-white">{project.name}</h3>
-                                    <p className="text-xs text-slate-500">{project.tasks.length} tasks</p>
+                                    <p className="text-xs text-slate-500">{project.tasks.length} 個のタスク</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-4">
@@ -152,7 +157,7 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                                             "hidden md:block px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border",
                                                             getStatusColor(task.status)
                                                         )}>
-                                                            {task.status.replace('_', ' ')}
+                                                            {getStatusLabel(task.status)}
                                                         </div>
 
                                                         {assignee ? (
@@ -163,6 +168,25 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                                             <div className="w-7 h-7 rounded-full border border-dashed border-slate-300 dark:border-white/10 flex items-center justify-center text-slate-300">
                                                                 <UserIcon className="w-3 h-3" />
                                                             </div>
+                                                        )}
+
+                                                        {(!isAdmin && task.status !== 'done' && task.status !== 'in_review') && (
+                                                            <button
+                                                                onClick={() => onTaskAction(project.id, task.id, task.status, task.points, task.assigneeId)}
+                                                                className="p-1 px-3 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all flex items-center gap-2"
+                                                            >
+                                                                <Play className="w-3 h-3 fill-current" />
+                                                                {task.status === 'todo' ? '開始' : '完了報告'}
+                                                            </button>
+                                                        )}
+
+                                                        {isAdmin && task.status === 'in_review' && (
+                                                            <button
+                                                                onClick={() => onTaskAction(project.id, task.id, task.status, task.points, task.assigneeId)}
+                                                                className="p-1 px-3 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all"
+                                                            >
+                                                                承認する
+                                                            </button>
                                                         )}
 
                                                         <button className="p-1 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-slate-600">
@@ -182,7 +206,7 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                                 <input
                                                     autoFocus
                                                     type="text"
-                                                    placeholder="Task title..."
+                                                    placeholder="タスク名を入力してEnter..."
                                                     className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner"
                                                     value={newTaskTitle}
                                                     onChange={(e) => setNewTaskTitle(e.target.value)}

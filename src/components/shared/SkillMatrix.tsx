@@ -1,61 +1,73 @@
 'use client';
 
 import React from 'react';
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { User } from './types';
+import { motion } from 'framer-motion';
+import { Target, Zap, ChevronUp } from 'lucide-react';
 
 interface SkillMatrixProps {
     user: User;
 }
 
 export default function SkillMatrix({ user }: SkillMatrixProps) {
-    // デフォルトのカテゴリと初期スコア
-    const defaultSkills = {
-        'UI/UX': 100,
-        'Frontend': 100,
-        'Backend': 100,
-        'Planning': 100,
-        'Review': 100,
-    };
+    const skills = [
+        { name: 'Frontend', color: 'bg-indigo-500' },
+        { name: 'Backend', color: 'bg-emerald-500' },
+        { name: 'UI/UX', color: 'bg-rose-500' },
+        { name: 'Planning', color: 'bg-amber-500' },
+        { name: 'Review', color: 'bg-purple-500' }
+    ];
 
-    const currentSkills = user.skillScore || defaultSkills;
-
-    const data = Object.entries(currentSkills).map(([subject, fullMark]) => ({
-        subject,
-        A: fullMark,
-        fullMark: Math.max(...Object.values(currentSkills), 500) // 動的に最大値を調整
-    }));
+    const getScore = (name: string) => user.skillScore?.[name] || 0;
+    const maxScore = Math.max(...skills.map(s => getScore(s.name)), 1000);
 
     return (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-5">
-            <h3 className="text-lg font-bold text-slate-900 mb-2">📊 スキルマトリクス</h3>
-            <p className="text-xs text-slate-500 mb-4">タスク完了による成長度</p>
-
-            <div className="h-64 w-full min-h-[256px] min-w-[250px]">
-                <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data}>
-                        <PolarGrid stroke="#e2e8f0" />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 12, fontWeight: 600 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 'dataMax']} tick={false} axisLine={false} />
-                        <Radar
-                            name={user.name}
-                            dataKey="A"
-                            stroke="#0f172a"
-                            fill="#0f172a"
-                            fillOpacity={0.2}
-                        />
-                    </RadarChart>
-                </ResponsiveContainer>
+        <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/5 shadow-premium p-6">
+            <div className="flex items-center justify-between mb-6">
+                <h3 className="font-black text-xs uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                    <Target className="w-4 h-4 text-indigo-500" /> スキルマトリックス
+                </h3>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-2">
-                {Object.entries(currentSkills).map(([subject, score]) => (
-                    <div key={subject} className="flex justify-between items-center text-xs bg-slate-50 px-2 py-1.5 rounded">
-                        <span className="font-semibold text-slate-600">{subject}</span>
-                        <span className="font-bold text-slate-900">{score} pt</span>
+            <div className="space-y-5">
+                {skills.map((skill, idx) => {
+                    const score = getScore(skill.name);
+                    const percentage = (score / maxScore) * 100;
+
+                    return (
+                        <div key={skill.name} className="space-y-2">
+                            <div className="flex justify-between items-end">
+                                <p className="text-xs font-black text-slate-700 dark:text-white uppercase tracking-wider">{skill.name}</p>
+                                <p className="text-[10px] font-black text-slate-400">
+                                    <span className="text-sm text-slate-900 dark:text-white">{score}</span> / {maxScore}
+                                </p>
+                            </div>
+                            <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-200/50 dark:border-white/5">
+                                <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${percentage}%` }}
+                                    transition={{ delay: 0.2 + idx * 0.1, duration: 1, ease: "easeOut" }}
+                                    className={`h-full ${skill.color} rounded-full relative shadow-lg shadow-current/20`}
+                                >
+                                    <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent" />
+                                </motion.div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            <div className="mt-8 p-4 bg-indigo-50/50 dark:bg-indigo-500/5 rounded-2xl border border-indigo-100 dark:border-indigo-500/10">
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
+                        <Zap className="w-4 h-4 fill-current" />
                     </div>
-                ))}
+                    <div>
+                        <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">次のランクまで</p>
+                        <p className="text-xs font-black text-slate-900 dark:text-white">あと 850pt で昇格可能です！</p>
+                    </div>
+                </div>
             </div>
-        </div>
+        </section>
     );
 }

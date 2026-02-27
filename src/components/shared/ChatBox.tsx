@@ -4,12 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ChatMessage, User } from './types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Sparkles, User as UserIcon, Bot, Loader2 } from 'lucide-react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-    return twMerge(clsx(inputs));
-}
+import { cn } from '@/lib/utils';
 
 interface ChatBoxProps {
     messages: ChatMessage[];
@@ -44,10 +39,10 @@ export default function ChatBox({ messages, currentUser, onSendMessage, onAskAI,
             <div className="p-4 border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-slate-800/50 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                    <h3 className="font-bold text-sm text-slate-900 dark:text-white">Team Chat</h3>
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-white">チームチャット</h3>
                 </div>
-                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    <Sparkles className="w-3 h-3 text-indigo-500" /> AI Enabled
+                <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    <Sparkles className="w-3 h-3 text-indigo-500" /> AI アシスタント有効
                 </div>
             </div>
 
@@ -116,7 +111,7 @@ export default function ChatBox({ messages, currentUser, onSendMessage, onAskAI,
                 <div className="relative group">
                     <input
                         type="text"
-                        placeholder="Type a message or use /ai to ask..."
+                        placeholder="メッセージを入力、または /ai でAIに質問..."
                         className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl pl-4 pr-12 py-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-inner"
                         value={inputText}
                         onChange={(e) => setInputText(e.target.value)}
@@ -134,7 +129,7 @@ export default function ChatBox({ messages, currentUser, onSendMessage, onAskAI,
                         onClick={() => setInputText('/ai ')}
                         className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded hover:bg-indigo-100 transition-colors flex items-center gap-1"
                     >
-                        <Sparkles className="w-3 h-3" /> ASK AI
+                        <Sparkles className="w-3 h-3" /> AIに質問する
                     </button>
                 </div>
             </div>

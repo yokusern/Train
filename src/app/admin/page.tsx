@@ -1,35 +1,44 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import useSWR, { mutate } from 'swr';
 import Header from '../../components/shared/Header';
 import ProjectList from '../../components/shared/ProjectList';
 import ActivityLog from '../../components/shared/ActivityLog';
 import ChatBox from '../../components/shared/ChatBox';
 import CalendarView from '../../components/shared/CalendarView';
-import { TaskStatus, User, Project, Task, ChatMessage, Activity } from '../../components/shared/types';
+import { TaskStatus, User, Project, ChatMessage } from '../../components/shared/types';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Trophy, TrendingUp, Users, Target, Layout, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Trophy, TrendingUp, Users, Target, MoreVertical, Calendar, Tag, Award } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 export default function AdminPage() {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<'tasks' | 'calendar'>('tasks');
+    const tabs = [
+        { id: 'tasks', label: 'タスク', icon: <Layout className="w-3 h-3" /> },
+        { id: 'calendar', label: 'カレンダー', icon: <Calendar className="w-3 h-3" /> }
+    ] as const;
+    type TabId = (typeof tabs)[number]['id'];
 
-    // MOCK: Alex (ID: 1)
-    const currentUser: User = {
-        id: 1,
-        name: 'Alex Carter',
-        avatar: 'AC',
-        points: 1250,
-        pendingPoints: 0,
-        rank: 'Senior',
-        role: 'ADMIN',
-        skillScore: { 'Backend': 1200, 'Planning': 900 }
-    };
+    const [activeTab, setActiveTab] = useState<TabId>('tasks');
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+    useEffect(() => {
+        const saved = localStorage.getItem('train_user');
+        if (saved) {
+            const user = JSON.parse(saved);
+            if (user.role !== 'ADMIN') {
+                router.push('/dashboard');
+            } else {
+                setCurrentUser(user);
+            }
+        } else {
+            router.push('/');
+        }
+    }, [router]);
 
     const { data: projects, error: projectsError } = useSWR<Project[]>('/api/projects', fetcher);
     const { data: users, error: usersError } = useSWR<User[]>('/api/users', fetcher);
@@ -38,6 +47,8 @@ export default function AdminPage() {
     const [isAILoading, setIsAILoading] = useState(false);
 
     const handleTaskAction = async (projectId: number, taskId: number, currentStatus: TaskStatus, points: number, currentAssignee: number | null) => {
+        if (!currentUser) return;
+
         let nextStatus: TaskStatus = currentStatus;
         let actionType = '';
 
@@ -68,7 +79,7 @@ export default function AdminPage() {
                         action_type: actionType,
                         target_id: taskId,
                         points_earned: points,
-                        message: actionType === 'points_awarded' ? 'approved and awarded points' : 'marked as completed'
+                        message: actionType === 'points_awarded' ? '完了を承認し、ポイントを付与しました' : 'タスクを完了としてマークしました'
                     })
                 });
             }
@@ -93,8 +104,8 @@ export default function AdminPage() {
         }
     };
 
-    if (projectsError || usersError) return <div className="p-8 text-center text-rose-500">Failed to load admin data.</div>;
-    if (!projects || !users) return <div className="p-8 text-center text-slate-400">Syncing management console...</div>;
+    if (projectsError || usersError) return <div className="p-8 text-center text-rose-500">管理者データの読み込みに失敗しました。</div>;
+    if (!projects || !users || !currentUser) return <div className="p-8 text-center text-slate-400">管理コンソールを同期中...</div>;
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-500">
@@ -107,20 +118,20 @@ export default function AdminPage() {
                         animate={{ opacity: 1, y: 0 }}
                         className="flex items-center justify-between border-b border-slate-200 dark:border-white/5 pb-4"
                     >
-                        <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Admin Console</h1>
+                        <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">管理コンソール</h1>
                         <div className="flex gap-1 bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-xl glass shadow-inner">
-                            {['tasks', 'calendar'].map(tab => (
+                            {tabs.map(tab => (
                                 <button
-                                    key={tab}
-                                    onClick={() => setActiveTab(tab as any)}
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
                                     className={cn(
-                                        "px-4 py-1.5 text-xs font-black uppercase tracking-widest rounded-lg transition-all",
-                                        activeTab === tab
+                                        "px-4 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center gap-2",
+                                        activeTab === tab.id
                                             ? "bg-white dark:bg-slate-700 shadow-premium text-slate-900 dark:text-white"
                                             : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                                     )}
                                 >
-                                    {tab}
+                                    {tab.icon} {tab.label}
                                 </button>
                             ))}
                         </div>
@@ -143,7 +154,7 @@ export default function AdminPage() {
                         messages={localChat}
                         currentUser={currentUser}
                         onSendMessage={(text) => setLocalChat(prev => [...prev, { id: Date.now(), user: currentUser.name, avatar: currentUser.avatar, text, time: 'Now' }])}
-                        onAskAI={() => { }} // Admin AI integration
+                        onAskAI={() => { }}
                         isAILoading={false}
                     />
                 </div>
@@ -152,14 +163,13 @@ export default function AdminPage() {
                     <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/5 shadow-premium p-6">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="font-black text-xs uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                                <Trophy className="w-4 h-4 text-amber-500" /> Leaderboard
+                                <Trophy className="w-4 h-4 text-amber-500" /> リーダーボード
                             </h3>
-                            <MoreVertical className="w-4 h-4 text-emerald-500" />
+                            <TrendingUp className="w-4 h-4 text-emerald-500" />
                         </div>
                         <div className="space-y-4">
-                            {(users || []).slice().sort((a: User, b: User) => b.points - a.points).map((user: User, idx: number) => (
+                            {users.sort((a, b) => b.points - a.points).map((user, idx) => (
                                 <div key={user.id} className="flex items-center justify-between group">
-
                                     <div className="flex items-center gap-3">
                                         <span className="text-xs font-black text-slate-300 group-hover:text-indigo-500 transition-colors w-4">{idx + 1}</span>
                                         <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/5">
@@ -184,12 +194,12 @@ export default function AdminPage() {
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-white/5 shadow-premium">
                             <Users className="w-4 h-4 text-indigo-500 mb-2" />
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">Team Size</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">チーム人数</p>
                             <p className="text-lg font-black text-slate-900 dark:text-white">{users.length}</p>
                         </div>
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-white/5 shadow-premium">
                             <Target className="w-4 h-4 text-emerald-500 mb-2" />
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">Active Proj</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">プロジェクト数</p>
                             <p className="text-lg font-black text-slate-900 dark:text-white">{projects.length}</p>
                         </div>
                     </div>

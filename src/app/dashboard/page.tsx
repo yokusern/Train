@@ -12,24 +12,29 @@ import { TaskStatus, User, Project, ChatMessage, Activity } from '../../componen
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { Sparkles, Layout, Calendar } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 export default function DashboardPage() {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<'tasks' | 'calendar'>('tasks');
+    const tabs = [
+        { id: 'tasks', label: 'タスク', icon: <Layout className="w-3 h-3" /> },
+        { id: 'calendar', label: 'カレンダー', icon: <Calendar className="w-3 h-3" /> }
+    ] as const;
+    type TabId = (typeof tabs)[number]['id'];
 
-    // In a real app, this would come from auth. For now, we mock Sarah (ID: 2)
-    const currentUser: User = {
-        id: 2,
-        name: 'Sarah Jenkins',
-        avatar: 'SJ',
-        points: 2100,
-        pendingPoints: 30,
-        rank: 'Lead',
-        role: 'MEMBER',
-        skillScore: { 'UI/UX': 1600, 'Frontend': 2200, 'Backend': 400 }
-    };
+    const [activeTab, setActiveTab] = useState<TabId>('tasks');
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+    useEffect(() => {
+        const saved = localStorage.getItem('train_user');
+        if (saved) {
+            setCurrentUser(JSON.parse(saved));
+        } else {
+            router.push('/');
+        }
+    }, [router]);
 
     const { data: projects, error: projectsError } = useSWR<Project[]>('/api/projects', fetcher);
     const { data: chatMessages = [] } = useSWR<ChatMessage[]>('/api/chat', fetcher, { refreshInterval: 5000 });
@@ -38,6 +43,8 @@ export default function DashboardPage() {
     const [isAILoading, setIsAILoading] = useState(false);
 
     const handleTaskAction = async (projectId: number, taskId: number, currentStatus: TaskStatus, points: number, currentAssignee: number | null) => {
+        if (!currentUser) return;
+
         let nextStatus: TaskStatus = currentStatus;
         if (currentStatus === 'todo') nextStatus = 'in_progress';
         else if (currentStatus === 'in_progress') nextStatus = 'in_review';
@@ -60,7 +67,7 @@ export default function DashboardPage() {
                     action_type: nextStatus === 'in_review' ? 'task_completed' : 'task_created',
                     target_id: taskId,
                     points_earned: nextStatus === 'in_review' ? points : 0,
-                    message: nextStatus === 'in_review' ? 'submitted for review' : 'started working'
+                    message: nextStatus === 'in_review' ? '完了報告を提出しました' : '作業を開始しました'
                 })
             });
 
@@ -71,6 +78,7 @@ export default function DashboardPage() {
     };
 
     const handleSendChat = (text: string) => {
+        if (!currentUser) return;
         const newMsg: ChatMessage = {
             id: Date.now(),
             user: currentUser.name,
@@ -79,10 +87,10 @@ export default function DashboardPage() {
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
         setLocalChat(prev => [...prev, newMsg]);
-        // In a real app, POST to /api/chat here
     };
 
     const handleAskAI = async (query: string) => {
+        if (!currentUser) return;
         setIsAILoading(true);
         const userMsg: ChatMessage = {
             id: Date.now(),
@@ -116,8 +124,8 @@ export default function DashboardPage() {
         }
     };
 
-    if (projectsError) return <div className="p-8 text-center text-rose-500">Failed to load projects.</div>;
-    if (!projects) return <div className="p-8 text-center text-slate-400">Loading infrastructure...</div>;
+    if (projectsError) return <div className="p-8 text-center text-rose-500">プロジェクトの読み込みに失敗しました。</div>;
+    if (!projects || !currentUser) return <div className="p-8 text-center text-slate-400">環境を同期中...</div>;
 
     const allMessages = [...chatMessages, ...localChat];
 
@@ -132,20 +140,20 @@ export default function DashboardPage() {
                         animate={{ opacity: 1, y: 0 }}
                         className="flex items-center justify-between border-b border-slate-200 dark:border-white/5 pb-4"
                     >
-                        <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">My Workspace</h1>
+                        <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">マイワークスペース</h1>
                         <div className="flex gap-1 bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-xl glass shadow-inner">
-                            {['tasks', 'calendar'].map(tab => (
+                            {tabs.map(tab => (
                                 <button
-                                    key={tab}
-                                    onClick={() => setActiveTab(tab as any)}
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
                                     className={cn(
-                                        "px-4 py-1.5 text-xs font-black uppercase tracking-widest rounded-lg transition-all",
-                                        activeTab === tab
+                                        "px-4 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center gap-2",
+                                        activeTab === tab.id
                                             ? "bg-white dark:bg-slate-700 shadow-premium text-slate-900 dark:text-white"
                                             : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                                     )}
                                 >
-                                    {tab}
+                                    {tab.icon} {tab.label}
                                 </button>
                             ))}
                         </div>
@@ -156,7 +164,7 @@ export default function DashboardPage() {
                             projects={projects}
                             isAdmin={false}
                             currentUser={currentUser}
-                            team={[currentUser]} // In real app, fetch team
+                            team={[currentUser]}
                             onTaskAction={handleTaskAction}
                             onCreateTask={() => { }}
                         />

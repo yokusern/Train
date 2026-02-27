@@ -1,6 +1,8 @@
-import React, { useMemo, useState } from 'react';
-import { Project, Activity, Task } from './types';
-import { Target, Zap } from 'lucide-react';
+'use client';
+
+import React from 'react';
+import { Project, Activity } from './types';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface CalendarViewProps {
     projects: Project[];
@@ -8,96 +10,69 @@ interface CalendarViewProps {
 }
 
 export default function CalendarView({ projects, activities }: CalendarViewProps) {
-    const [currentDate, setCurrentDate] = useState(new Date());
-
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0 (Sun) - 6 (Sat)
-
-    // Collect all tasks with deadlines
-    const allTasks = useMemo(() => {
-        return projects.flatMap(p => p.tasks).filter(t => t.deadline);
-    }, [projects]);
-
-    const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
-    const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
-    const goToday = () => setCurrentDate(new Date());
-
-    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-    const blanks = Array.from({ length: firstDayOfMonth }, (_, i) => i);
+    // 簡易的なカレンダー表示（モック）
+    const days = ['月', '火', '水', '木', '金', '土', '日'];
+    const today = new Date().getDate();
 
     return (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-
-            {/* Calendar Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
-                <h2 className="text-lg font-bold text-slate-900">
-                    {year}年 {month + 1}月
-                </h2>
-                <div className="flex items-center gap-2">
-                    <button onClick={goToday} className="text-xs font-semibold text-slate-500 hover:text-slate-900 px-3 py-1.5 rounded-md hover:bg-slate-200 transition-colors">
-                        今日
-                    </button>
-                    <div className="flex bg-white border border-slate-200 rounded-md p-0.5">
-                        <button onClick={prevMonth} className="px-3 py-1 hover:bg-slate-100 rounded text-slate-600 transition-colors">◀</button>
-                        <button onClick={nextMonth} className="px-3 py-1 border-l border-slate-100 hover:bg-slate-100 rounded text-slate-600 transition-colors">▶</button>
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/5 shadow-premium p-6">
+            <div className="flex items-center justify-between mb-8">
+                <h3 className="font-black text-xs uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                    <CalendarIcon className="w-4 h-4 text-indigo-500" /> チームスケジュール
+                </h3>
+                <div className="flex items-center gap-4">
+                    <p className="text-sm font-black text-slate-900 dark:text-white">2026年 2月</p>
+                    <div className="flex gap-1">
+                        <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                            <ChevronLeft className="w-4 h-4 text-slate-400" />
+                        </button>
+                        <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                            <ChevronRight className="w-4 h-4 text-slate-400" />
+                        </button>
                     </div>
                 </div>
             </div>
 
-            {/* Calendar Grid */}
-            <div className="grid grid-cols-7 gap-px bg-slate-200 text-xs font-semibold text-slate-500">
-                {['日', '月', '火', '水', '木', '金', '土'].map(d => (
-                    <div key={d} className="bg-white py-2 text-center uppercase tracking-widest">{d}</div>
+            <div className="grid grid-cols-7 gap-px bg-slate-100 dark:bg-white/5 rounded-2xl overflow-hidden border border-slate-100 dark:border-white/5">
+                {days.map(day => (
+                    <div key={day} className="bg-slate-50 dark:bg-slate-800/50 py-3 text-center">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{day}</span>
+                    </div>
                 ))}
-            </div>
-
-            <div className="grid grid-cols-7 gap-px bg-slate-200">
-                {blanks.map(b => (
-                    <div key={`blank-${b}`} className="bg-slate-50 min-h-[100px]" />
-                ))}
-                {days.map(day => {
-                    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const isToday = new Date().toISOString().split('T')[0] === dateStr;
-
-                    // Find tasks due today
-                    const dueTasks = allTasks.filter(t => t.deadline.startsWith(dateStr));
-                    // Find activities that happened today
-                    const dayActivities = activities.filter(a => a.time.startsWith(dateStr));
-
+                {Array.from({ length: 28 }).map((_, i) => {
+                    const dayNum = i + 1;
+                    const isToday = dayNum === today;
                     return (
-                        <div key={day} className={`bg-white min-h-[100px] p-2 hover:bg-slate-50 transition-colors group relative ${isToday ? 'bg-blue-50/30' : ''}`}>
-                            <div className="flex items-center justify-between mb-2">
-                                <span className={`w-6 h-6 flex items-center justify-center text-sm font-bold rounded-full ${isToday ? 'bg-primary text-white shadow-sm' : 'text-slate-600'}`}>
-                                    {day}
+                        <div key={i} className="bg-white dark:bg-slate-900 min-h-[100px] p-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+                            <div className="flex justify-between items-start mb-2">
+                                <span className={cn(
+                                    "text-xs font-black",
+                                    isToday ? "w-6 h-6 bg-indigo-600 text-white rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20" : "text-slate-400"
+                                )}>
+                                    {dayNum}
                                 </span>
-                                {(dueTasks.length > 0 || dayActivities.length > 0) && (
-                                    <span className="text-[10px] text-slate-400 font-medium">
-                                        {dueTasks.length + dayActivities.length} items
-                                    </span>
-                                )}
                             </div>
 
-                            <div className="space-y-1.5 overflow-hidden">
-                                {/* Due Tasks */}
-                                {dueTasks.map(t => (
-                                    <div key={`task-${t.id}`} className="text-[10px] py-1 px-1.5 rounded bg-blue-50 text-blue-700 border border-blue-100 truncate flex items-center gap-1 font-medium">
-                                        <Target size={10} className="shrink-0 text-blue-500" /> {t.title}
-                                    </div>
-                                ))}
-                                {/* Activities */}
-                                {dayActivities.map(a => (
-                                    <div key={`act-${a.id}`} className="text-[10px] py-1 px-1.5 rounded bg-amber-50 text-amber-700 border border-amber-100 truncate flex items-center gap-1 font-medium">
-                                        <Zap size={10} className="shrink-0 text-amber-500" /> {a.user}: {a.action}
-                                    </div>
-                                ))}
-                            </div>
+                            {/* デモ用のダミーイベント */}
+                            {dayNum === 27 && (
+                                <div className="bg-indigo-500/10 border-l-2 border-indigo-500 p-1.5 rounded-r-md">
+                                    <p className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 truncate">LPデザインFIX</p>
+                                </div>
+                            )}
+                            {dayNum === 28 && (
+                                <div className="bg-emerald-500/10 border-l-2 border-emerald-500 p-1.5 rounded-r-md">
+                                    <p className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 truncate">本番DB移行</p>
+                                </div>
+                            )}
                         </div>
                     );
                 })}
             </div>
         </div>
     );
+}
+
+// ヘルパー関数
+function cn(...inputs: Array<string | false | null | undefined>) {
+    return inputs.filter(Boolean).join(' ');
 }

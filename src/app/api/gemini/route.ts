@@ -5,36 +5,34 @@ export async function POST(req: Request) {
     try {
         if (!process.env.GEMINI_API_KEY) {
             return NextResponse.json(
-                { error: 'Server configuration error: GEMINI_API_KEY is not set.' },
+                { error: 'サーバー設定エラー: GEMINI_API_KEYが設定されていません。' },
                 { status: 500 }
             );
         }
 
-        const body = await req.json();
-        const { prompt, systemInstruction } = body;
+        const { prompt, systemInstruction } = await req.json();
 
         if (!prompt) {
             return NextResponse.json(
-                { error: 'Prompt is required.' },
+                { error: 'プロンプトが必要です。' },
                 { status: 400 }
             );
         }
 
-        // Since we are using standard generateContent without specific system messages, 
-        // we'll prepend instructions if they exist. (Alternatively, you can configure geminiModel with system_instruction).
-        const fullPrompt = systemInstruction
-            ? `[SYSTEM INSTRUCTION: ${systemInstruction}]\n\nUser Query: ${prompt}`
-            : prompt;
+        const defaultSystemInstruction = "あなたはプロジェクト管理アシスタント『Train AI』です。回答はすべて日本語で行ってください。親切で励みになる口調で、チームの成長をサポートしてください。";
+
+        const fullPrompt = `[システム指示: ${systemInstruction || defaultSystemInstruction}]\n\nユーザーの質問: ${prompt}`;
 
         const result = await geminiModel.generateContent(fullPrompt);
         const response = await result.response;
         const text = response.text();
 
         return NextResponse.json({ success: true, data: text });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Gemini API Error:', error);
+        const message = error instanceof Error ? error.message : 'AI処理中にエラーが発生しました。';
         return NextResponse.json(
-            { error: error.message || 'An error occurred during AI processing.' },
+            { error: message },
             { status: 500 }
         );
     }
