@@ -88,7 +88,14 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                 </div>
                                 <div>
                                     <h3 className="font-bold text-slate-900 dark:text-white">{project.name}</h3>
-                                    <p className="text-xs text-slate-500">{project.tasks.length} 個のタスク</p>
+                                    <p className="text-xs text-slate-500">
+                                        {project.tasks.length} 個のタスク
+                                        {project.createdBy && (
+                                            <span className="ml-2 text-[10px] text-slate-400">
+                                                作成: {project.createdBy}
+                                            </span>
+                                        )}
+                                    </p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-4">
@@ -133,20 +140,34 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                                             {getStatusIcon(task.status)}
                                                         </button>
                                                         <div className="flex-1 min-w-0">
-                                                            <p className={cn(
-                                                                "text-sm font-semibold truncate",
-                                                                task.status === 'done' ? "text-slate-400 line-through" : "text-slate-700 dark:text-slate-200"
-                                                            )}>
+                                                            <p
+                                                                className={cn(
+                                                                    "text-sm font-semibold truncate",
+                                                                    task.status === 'done'
+                                                                        ? "text-slate-400 line-through"
+                                                                        : "text-slate-700 dark:text-slate-200",
+                                                                )}
+                                                            >
                                                                 {task.title}
                                                             </p>
-                                                            <div className="flex items-center gap-3 mt-1">
+                                                            <div className="flex flex-wrap items-center gap-3 mt-1 text-[10px]">
                                                                 {task.category && (
-                                                                    <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold text-slate-400">
+                                                                    <span className="flex items-center gap-1 uppercase tracking-wider font-bold text-slate-400">
                                                                         <Tag className="w-3 h-3" /> {task.category}
                                                                     </span>
                                                                 )}
+                                                                {task.createdBy && (
+                                                                    <span className="text-slate-400 font-bold">
+                                                                        作成: {task.createdBy}
+                                                                    </span>
+                                                                )}
+                                                                {assignee && (
+                                                                    <span className="text-slate-400 font-bold">
+                                                                        担当: {assignee.name}
+                                                                    </span>
+                                                                )}
                                                                 {isAdmin && (
-                                                                    <span className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 uppercase tracking-wider">
+                                                                    <span className="flex items-center gap-1 font-bold text-indigo-500 uppercase tracking-wider">
                                                                         <Award className="w-3 h-3" /> {task.points} pts
                                                                     </span>
                                                                 )}

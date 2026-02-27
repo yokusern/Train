@@ -26,12 +26,13 @@ export function saveProjects(projects: Project[]) {
   }
 }
 
-export function addProject(projects: Project[], name: string, icon: string): Project[] {
+export function addProject(projects: Project[], name: string, icon: string, createdBy: string): Project[] {
   const newProject: Project = {
     id: Date.now(),
     name,
     icon,
     tasks: [],
+    createdBy,
   };
   const next = [...projects, newProject];
   saveProjects(next);
@@ -44,7 +45,8 @@ export function addTask(
   title: string,
   points: number,
   assigneeId: number | null,
-  category?: string,
+  category: string | undefined,
+  createdBy: string,
 ): Project[] {
   const next = projects.map((p) =>
     p.id !== projectId
@@ -61,6 +63,7 @@ export function addTask(
               assigneeId,
               deadline: '',
               category,
+              createdBy,
             } satisfies Task,
           ],
         },

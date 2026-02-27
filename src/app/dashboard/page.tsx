@@ -5,7 +5,6 @@ import Header from '../../components/shared/Header';
 import ProjectList from '../../components/shared/ProjectList';
 import ActivityLog from '../../components/shared/ActivityLog';
 import ChatBox from '../../components/shared/ChatBox';
-import SkillMatrix from '../../components/shared/SkillMatrix';
 import CalendarView from '../../components/shared/CalendarView';
 import { TaskStatus, User, Project, ChatMessage, Activity } from '../../components/shared/types';
 import { useRouter } from 'next/navigation';
@@ -161,7 +160,6 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="lg:col-span-1 space-y-8">
-                    <SkillMatrix user={currentUser} />
                     <ActivityLog activities={[]} />
                 </div>
             </main>

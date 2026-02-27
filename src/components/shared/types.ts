@@ -20,6 +20,7 @@ export interface Task {
     assigneeId: number | null;
     deadline: string;
     category?: string; // e.g. 'Engineering', 'Design', 'Planning'
+    createdBy?: string;
 }
 
 export interface Project {
@@ -27,6 +28,7 @@ export interface Project {
     name: string;
     icon: string;
     tasks: Task[];
+    createdBy?: string;
 }
 
 export interface Activity {

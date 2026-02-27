@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, TrendingUp, Users, Target, Layout, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { loadProjects, saveProjects, addProject, addTask, updateTaskStatus } from '@/lib/projectStore';
+import { loadProjects, addProject, addTask, updateTaskStatus } from '@/lib/projectStore';
 
 export default function AdminPage() {
     const router = useRouter();
@@ -71,13 +71,14 @@ export default function AdminPage() {
     };
 
     const handleCreateTask = async (projectId: number, title: string, points: number, assigneeId: number | null, category?: string) => {
-        setProjects(prev => (prev ? addTask(prev, projectId, title, points, assigneeId, category) : prev));
+        if (!currentUser) return;
+        setProjects(prev => (prev ? addTask(prev, projectId, title, points, assigneeId, category, currentUser.name) : prev));
     };
 
     const handleCreateProject = () => {
         const name = newProjectName.trim();
-        if (!name || !projects) return;
-        const next = addProject(projects, name, '📁');
+        if (!name || !projects || !currentUser) return;
+        const next = addProject(projects, name, '📁', currentUser.name);
         setProjects(next);
         setNewProjectName('');
     };
