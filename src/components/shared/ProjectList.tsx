@@ -32,6 +32,7 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
     const [expandedProjects, setExpandedProjects] = useState<number[]>(projects.map(p => p.id));
     const [isAddingTask, setIsAddingTask] = useState<number | null>(null);
     const [newTaskTitle, setNewTaskTitle] = useState('');
+    const [newTaskPoints, setNewTaskPoints] = useState<number>(50);
 
     const toggleProject = (id: number) => {
         setExpandedProjects(prev =>
@@ -226,22 +227,55 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                                 animate={{ opacity: 1, scale: 1 }}
                                                 className="p-3"
                                             >
-                                                <input
-                                                    autoFocus
-                                                    type="text"
-                                                    placeholder="タスク名を入力してEnter..."
-                                                    className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner"
-                                                    value={newTaskTitle}
-                                                    onChange={(e) => setNewTaskTitle(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter' && newTaskTitle.trim()) {
-                                                            onCreateTask(project.id, newTaskTitle, 50, null);
+                                                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                                                    <input
+                                                        autoFocus
+                                                        type="text"
+                                                        placeholder="タスク名"
+                                                        className="sm:col-span-4 w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner"
+                                                        value={newTaskTitle}
+                                                        onChange={(e) => setNewTaskTitle(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Escape') setIsAddingTask(null);
+                                                        }}
+                                                    />
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        step={1}
+                                                        inputMode="numeric"
+                                                        placeholder="pt"
+                                                        className="sm:col-span-1 w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner"
+                                                        value={Number.isFinite(newTaskPoints) ? newTaskPoints : 0}
+                                                        onChange={(e) => setNewTaskPoints(Number(e.target.value))}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Escape') setIsAddingTask(null);
+                                                        }}
+                                                    />
+                                                </div>
+                                                <div className="mt-3 flex items-center justify-end gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setIsAddingTask(null)}
+                                                        className="px-3 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                                    >
+                                                        キャンセル
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={!newTaskTitle.trim()}
+                                                        onClick={() => {
+                                                            const points = Number.isFinite(newTaskPoints) ? Math.max(0, Math.floor(newTaskPoints)) : 0;
+                                                            onCreateTask(project.id, newTaskTitle.trim(), points, null);
                                                             setNewTaskTitle('');
+                                                            setNewTaskPoints(50);
                                                             setIsAddingTask(null);
-                                                        }
-                                                        if (e.key === 'Escape') setIsAddingTask(null);
-                                                    }}
-                                                />
+                                                        }}
+                                                        className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest bg-indigo-600 text-white disabled:opacity-40 hover:bg-indigo-500 transition-colors"
+                                                    >
+                                                        追加
+                                                    </button>
+                                                </div>
                                             </motion.div>
                                         )}
                                     </div>
