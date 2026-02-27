@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Bell, Settings, Award, Layers, Train, User as UserIcon } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { LogOut, Bell, Award, Train } from 'lucide-react';
 import { User } from './types';
 
 interface HeaderProps {
@@ -12,6 +12,15 @@ interface HeaderProps {
 }
 
 export default function Header({ currentUser, isAdmin, onSwitchRole }: HeaderProps) {
+    const handleLogout = () => {
+        try {
+            localStorage.removeItem('train_user');
+        } catch {
+            // ignore
+        }
+        onSwitchRole();
+    };
+
     return (
         <header className="sticky top-0 z-50 w-full border-b border-white/10 glass">
             <div className="max-w-7xl mx-auto px-4 sm:px-8 h-18 flex items-center justify-between">
@@ -76,9 +85,9 @@ export default function Header({ currentUser, isAdmin, onSwitchRole }: HeaderPro
                             </div>
                         </div>
                         <button
-                            onClick={onSwitchRole}
+                            onClick={handleLogout}
                             className="ml-2 p-2.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all"
-                            title="ログアウト / ユーザー切替"
+                            title="ログアウト"
                         >
                             <LogOut className="w-5 h-5" />
                         </button>

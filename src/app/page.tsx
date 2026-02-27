@@ -23,6 +23,7 @@ export default function LandingPage() {
         if (user.role === 'ADMIN') router.push('/admin');
         else router.push('/dashboard');
       } catch (e) {
+        localStorage.removeItem('train_user');
         console.error('Failed to parse saved user');
       }
     }
