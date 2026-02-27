@@ -1,0 +1,115 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+enum Role {
+  member
+  admin
+}
+
+enum ProjectStatus {
+  active
+  completed
+  archived
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  in_review
+  done
+}
+
+enum ActionType {
+  task_created
+  task_completed
+  comment_added
+  points_awarded
+}
+
+model User {
+  id             BigInt        @id @default(autoincrement())
+  name           String
+  email          String        @unique
+  avatar_url     String?
+  role           Role          @default(member)
+  total_points   Int           @default(0)
+  pending_points Int           @default(0)
+  skill_score    Json? // e.g., {"Development": 1500, "Design": 800, "Planning": 300}
+  created_at     DateTime      @default(now())
+  tasks          Task[]
+  activity_logs  ActivityLog[]
+  comments       Comment[]
+
+  @@map("users")
+}
+
+model Project {
+  id            BigInt        @id @default(autoincrement())
+  name          String
+  description   String?
+  icon          String?
+  status        ProjectStatus @default(active)
+  created_at    DateTime      @default(now())
+  tasks         Task[]
+  activity_logs ActivityLog[]
+  comments      Comment[]
+
+  @@map("projects")
+}
+
+model Task {
+  id                BigInt     @id @default(autoincrement())
+  project_id        BigInt
+  project           Project    @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  title             String
+  content           String?
+  status            TaskStatus @default(todo)
+  assignee_id       BigInt?
+  assignee          User?      @relation(fields: [assignee_id], references: [id], onDelete: SetNull)
+  difficulty_points Int        @default(10)
+  category          String?
+  deadline          DateTime?
+  created_at        DateTime   @default(now())
+  completed_at      DateTime?
+  comments          Comment[]
+
+  @@map("tasks")
+}
+
+model ActivityLog {
+  id            BigInt     @id @default(autoincrement())
+  user_id       BigInt?
+  user          User?      @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  project_id    BigInt?
+  project       Project?    @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  action_type   ActionType
+  target_id     BigInt?
+  points_earned Int        @default(0)
+  message       String?
+  created_at    DateTime   @default(now())
+
+  @@map("activity_logs")
+}
+
+model Comment {
+  id         BigInt   @id @default(autoincrement())
+  task_id    BigInt?
+  task       Task?    @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  project_id BigInt
+  project    Project  @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  user_id    BigInt
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  content    String
+  created_at DateTime @default(now())
+
+  @@map("comments")
+}

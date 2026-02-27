@@ -1,212 +1,200 @@
 'use client';
 
 import React, { useState } from 'react';
+import useSWR, { mutate } from 'swr';
 import Header from '../../components/shared/Header';
 import ProjectList from '../../components/shared/ProjectList';
 import ActivityLog from '../../components/shared/ActivityLog';
 import ChatBox from '../../components/shared/ChatBox';
 import CalendarView from '../../components/shared/CalendarView';
-import { initialTeam, initialProjects, initialActivities, initialChatMessages } from '../../lib/mockData';
-import { TaskStatus, User, Project, Task, ChatMessage } from '../../components/shared/types';
+import { TaskStatus, User, Project, Task, ChatMessage, Activity } from '../../components/shared/types';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
+import { Trophy, TrendingUp, Users, Target, MoreVertical, Calendar, Tag, Award } from 'lucide-react';
+
+const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 export default function AdminPage() {
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<'tasks' | 'calendar'>('tasks');
 
-    // MOCK: Local state for admin
-    const [currentUser] = useState<User>(initialTeam[0]); // Alex (Admin)
-    const [team, setTeam] = useState<User[]>(initialTeam);
-    const [projects, setProjects] = useState<Project[]>(initialProjects);
-    const [activities, setActivities] = useState(initialActivities);
-    const [chatMessages, setChatMessages] = useState(initialChatMessages);
+    // MOCK: Alex (ID: 1)
+    const currentUser: User = {
+        id: 1,
+        name: 'Alex Carter',
+        avatar: 'AC',
+        points: 1250,
+        pendingPoints: 0,
+        rank: 'Senior',
+        role: 'ADMIN',
+        skillScore: { 'Backend': 1200, 'Planning': 900 }
+    };
 
-    const handleTaskAction = (projectId: number, taskId: number, currentStatus: TaskStatus, points: number, currentAssignee: number | null, category?: string) => {
+    const { data: projects, error: projectsError } = useSWR<Project[]>('/api/projects', fetcher);
+    const { data: users, error: usersError } = useSWR<User[]>('/api/users', fetcher);
+
+    const [localChat, setLocalChat] = useState<ChatMessage[]>([]);
+    const [isAILoading, setIsAILoading] = useState(false);
+
+    const handleTaskAction = async (projectId: number, taskId: number, currentStatus: TaskStatus, points: number, currentAssignee: number | null) => {
         let nextStatus: TaskStatus = currentStatus;
-        let earnedPoints = 0;
-        let newPendingPoints = 0;
-        let taskName = '';
-        let assigneeId = currentAssignee || currentUser.id;
-        let actionLog = '';
+        let actionType = '';
 
         if (currentStatus === 'in_review') {
             nextStatus = 'done';
-            earnedPoints = points;
-            newPendingPoints = -points;
-            actionLog = '承認してポイントを付与しました';
+            actionType = 'points_awarded';
         } else if (currentStatus === 'todo' || currentStatus === 'in_progress') {
             nextStatus = 'done';
-            earnedPoints = points;
-            actionLog = '完了として処理しました';
+            actionType = 'task_completed';
         }
 
         if (nextStatus === currentStatus) return;
 
-        setProjects(projects.map(p => {
-            if (p.id !== projectId) return p;
-            return {
-                ...p,
-                tasks: p.tasks.map(t => {
-                    if (t.id !== taskId) return t;
-                    taskName = t.title;
-                    return { ...t, status: nextStatus, assigneeId };
-                })
-            };
-        }));
+        try {
+            await fetch('/api/tasks', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: taskId, status: nextStatus })
+            });
 
-        if (earnedPoints !== 0 || newPendingPoints !== 0) {
-            setTeam(team.map(u => {
-                if (u.id === assigneeId) {
-                    const updatedSkills = { ...u.skillScore } as Record<string, number>;
-                    if (category && earnedPoints > 0) {
-                        updatedSkills[category] = (updatedSkills[category] || 0) + earnedPoints;
-                    }
-                    return {
-                        ...u,
-                        points: u.points + earnedPoints,
-                        pendingPoints: Math.max(0, u.pendingPoints + newPendingPoints),
-                        skillScore: updatedSkills
-                    };
-                }
-                return u;
-            }));
-        }
+            if (currentAssignee) {
+                await fetch('/api/activity', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: currentAssignee,
+                        project_id: projectId,
+                        action_type: actionType,
+                        target_id: taskId,
+                        points_earned: points,
+                        message: actionType === 'points_awarded' ? 'approved and awarded points' : 'marked as completed'
+                    })
+                });
+            }
 
-        const newActivity = {
-            id: Date.now(),
-            user: currentUser.name,
-            action: actionLog,
-            target: taskName,
-            points: `+${earnedPoints}`,
-            time: 'たった今'
-        };
-        setActivities([newActivity, ...activities]);
-
-        if (earnedPoints > 0) {
-            const assignedUser = team.find(u => u.id === assigneeId);
-            const systemMsg: ChatMessage = {
-                id: Date.now() + 1,
-                user: 'System Notification',
-                avatar: '🤖',
-                text: `${assignedUser?.name}さんの "${taskName}" が承認されました！ 🎉 ${earnedPoints}pt獲得！`,
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
-            setChatMessages([...chatMessages, systemMsg]);
+            mutate('/api/projects');
+            mutate('/api/users');
+        } catch (err) {
+            console.error('Admin task action error:', err);
         }
     };
 
-    const handleCreateTask = (projectId: number, title: string, points: number, assigneeId: number | null, category?: string) => {
-        const newTask: Task = {
-            id: Date.now(),
-            title,
-            status: 'todo',
-            points,
-            assigneeId,
-            deadline: '未定',
-            category: category
-        };
-
-        setProjects(projects.map(p => {
-            if (p.id !== projectId) return p;
-            return { ...p, tasks: [...p.tasks, newTask] };
-        }));
-
-        const newActivity = {
-            id: Date.now(),
-            user: currentUser.name,
-            action: 'タスクを作成しました',
-            target: title,
-            points: '-',
-            time: 'たった今'
-        };
-        setActivities([newActivity, ...activities]);
+    const handleCreateTask = async (projectId: number, title: string, points: number, assigneeId: number | null, category?: string) => {
+        try {
+            await fetch('/api/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ project_id: projectId, title, points, assignee_id: assigneeId, category })
+            });
+            mutate('/api/projects');
+        } catch (err) {
+            console.error('Create task error:', err);
+        }
     };
 
-    const handleSendChat = (text: string) => {
-        const newMsg = {
-            id: Date.now(),
-            user: currentUser.name,
-            avatar: currentUser.avatar,
-            text,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-        setChatMessages([...chatMessages, newMsg]);
-    };
+    if (projectsError || usersError) return <div className="p-8 text-center text-rose-500">Failed to load admin data.</div>;
+    if (!projects || !users) return <div className="p-8 text-center text-slate-400">Syncing management console...</div>;
 
     return (
-        <div className="min-h-screen bg-slate-100 text-slate-800 font-sans pb-20">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-500">
             <Header currentUser={currentUser} isAdmin={true} onSwitchRole={() => router.push('/')} />
 
-            <main className="max-w-7xl mx-auto p-4 sm:p-8 grid grid-cols-1 lg:grid-cols-4 gap-10">
+            <main className="max-w-7xl mx-auto p-4 sm:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
                 <div className="lg:col-span-3 space-y-8">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-300 pb-4 gap-4">
-                        <h1 className="text-2xl font-bold text-slate-900">管理者ダッシュボード</h1>
-                        <div className="flex gap-1 bg-slate-200 p-1 rounded-lg self-start sm:self-auto shadow-sm">
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex items-center justify-between border-b border-slate-200 dark:border-white/5 pb-4"
+                    >
+                        <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Admin Console</h1>
+                        <div className="flex gap-1 bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-xl glass shadow-inner">
                             {['tasks', 'calendar'].map(tab => (
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab as any)}
-                                    className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${activeTab === tab ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+                                    className={cn(
+                                        "px-4 py-1.5 text-xs font-black uppercase tracking-widest rounded-lg transition-all",
+                                        activeTab === tab
+                                            ? "bg-white dark:bg-slate-700 shadow-premium text-slate-900 dark:text-white"
+                                            : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                                    )}
                                 >
-                                    {tab === 'tasks' ? 'リスト表示' : 'カレンダー'}
+                                    {tab}
                                 </button>
                             ))}
                         </div>
-                    </div>
+                    </motion.div>
 
                     {activeTab === 'tasks' ? (
                         <ProjectList
                             projects={projects}
                             isAdmin={true}
                             currentUser={currentUser}
-                            team={team}
+                            team={users}
                             onTaskAction={handleTaskAction}
                             onCreateTask={handleCreateTask}
                         />
                     ) : (
-                        <CalendarView projects={projects} activities={activities} />
+                        <CalendarView projects={projects} activities={[]} />
                     )}
 
-                    <ChatBox messages={chatMessages} currentUser={currentUser} onSendMessage={handleSendChat} />
+                    <ChatBox
+                        messages={localChat}
+                        currentUser={currentUser}
+                        onSendMessage={(text) => setLocalChat(prev => [...prev, { id: Date.now(), user: currentUser.name, avatar: currentUser.avatar, text, time: 'Now' }])}
+                        onAskAI={() => { }} // Admin AI integration
+                        isAILoading={false}
+                    />
                 </div>
 
                 <div className="lg:col-span-1 space-y-8">
-                    {/* Leaderboard only visible to Admin generally, or members see a sanitized one. We show full here */}
-                    <div className="bg-white border border-slate-200 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-5">
-                        <h3 className="text-lg font-bold text-slate-900 flex items-center justify-between mb-4">
-                            <span>🏆 貢献度ランキング</span>
-                            <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-2 py-1 rounded">今週</span>
-                        </h3>
-
+                    <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/5 shadow-premium p-6">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="font-black text-xs uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                                <Trophy className="w-4 h-4 text-amber-500" /> Leaderboard
+                            </h3>
+                            <MoreVertical className="w-4 h-4 text-emerald-500" />
+                        </div>
                         <div className="space-y-4">
-                            {[...team].sort((a, b) => b.points - a.points).map((user, idx) => (
-                                <div key={user.id} className="flex flex-col gap-1 p-2 rounded-lg transition-colors">
-                                    <div className="flex items-center justify-between w-full">
-                                        <div className="flex items-center gap-3">
-                                            <span className={`text-sm font-black w-4 text-center ${idx === 0 ? 'text-amber-500' : idx === 1 ? 'text-slate-400' : idx === 2 ? 'text-amber-700' : 'text-slate-300'}`}>
-                                                {idx + 1}
-                                            </span>
-                                            <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border shrink-0 bg-slate-100 text-slate-600 border-slate-200">
-                                                {user.avatar}
-                                            </div>
-                                            <span className="text-sm font-semibold truncate max-w-[80px] sm:max-w-none text-slate-800">
-                                                {user.name}
-                                            </span>
+                            {(users || []).slice().sort((a: User, b: User) => b.points - a.points).map((user: User, idx: number) => (
+                                <div key={user.id} className="flex items-center justify-between group">
+
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xs font-black text-slate-300 group-hover:text-indigo-500 transition-colors w-4">{idx + 1}</span>
+                                        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/5">
+                                            {user.avatar}
                                         </div>
-                                        <span className="text-sm font-bold text-slate-900 bg-slate-50 px-2 py-1 rounded border border-slate-100 shrink-0">
-                                            {user.points} <span className="text-[10px] text-slate-500 font-medium">Pt</span>
-                                        </span>
+                                        <div>
+                                            <p className="text-xs font-bold text-slate-900 dark:text-white">{user.name}</p>
+                                            <p className="text-[10px] text-slate-400 uppercase tracking-tighter">{user.rank}</p>
+                                        </div>
                                     </div>
-                                    {user.pendingPoints > 0 && (
-                                        <div className="text-[10px] font-semibold text-amber-600 text-right w-full">
-                                            +{user.pendingPoints} 承認待ち
-                                        </div>
-                                    )}
+                                    <div className="text-right">
+                                        <p className="text-xs font-black text-slate-900 dark:text-white">{user.points} pt</p>
+                                        {user.pendingPoints > 0 && (
+                                            <p className="text-[9px] font-bold text-amber-600">+{user.pendingPoints} PENDING</p>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
+                    </section>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-white/5 shadow-premium">
+                            <Users className="w-4 h-4 text-indigo-500 mb-2" />
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">Team Size</p>
+                            <p className="text-lg font-black text-slate-900 dark:text-white">{users.length}</p>
+                        </div>
+                        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-white/5 shadow-premium">
+                            <Target className="w-4 h-4 text-emerald-500 mb-2" />
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">Active Proj</p>
+                            <p className="text-lg font-black text-slate-900 dark:text-white">{projects.length}</p>
+                        </div>
                     </div>
-                    <ActivityLog activities={activities} />
+
+                    <ActivityLog activities={[]} />
                 </div>
             </main>
         </div>
