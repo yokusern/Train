@@ -145,9 +145,11 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                                                         <Tag className="w-3 h-3" /> {task.category}
                                                                     </span>
                                                                 )}
-                                                                <span className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 uppercase tracking-wider">
-                                                                    <Award className="w-3 h-3" /> {task.points} pts
-                                                                </span>
+                                                                {isAdmin && (
+                                                                    <span className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 uppercase tracking-wider">
+                                                                        <Award className="w-3 h-3" /> {task.points} pts
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     </div>
