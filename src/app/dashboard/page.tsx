@@ -22,18 +22,21 @@ export default function DashboardPage() {
     type TabId = (typeof tabs)[number]['id'];
 
     const [activeTab, setActiveTab] = useState<TabId>('tasks');
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
-    const [projects, setProjects] = useState<Project[] | null>(null);
+    const [currentUser, setCurrentUser] = useState<User | null>(() => {
+        if (typeof window === 'undefined') return null;
+        const saved = window.localStorage.getItem('train_user');
+        return saved ? JSON.parse(saved) : null;
+    });
+    const [projects, setProjects] = useState<Project[] | null>(() => {
+        if (typeof window === 'undefined' || !localStorage.getItem('train_user')) return null;
+        return loadProjects();
+    });
 
     useEffect(() => {
-        const saved = localStorage.getItem('train_user');
-        if (saved) {
-            setCurrentUser(JSON.parse(saved));
-            setProjects(loadProjects());
-        } else {
+        if (!currentUser) {
             router.push('/');
         }
-    }, [router]);
+    }, [currentUser, router]);
 
     const [chatMessages] = useState<ChatMessage[]>([]);
 

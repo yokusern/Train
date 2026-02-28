@@ -1,29 +1,18 @@
 'use client';
 
 import type { Project, Task, TaskStatus } from '@/components/shared/types';
+import { loadState, saveState, TrainState } from './trainState';
 
-const STORAGE_KEY = 'train_projects';
+const STORAGE_KEY = 'train_state_v2';
 
 export function loadProjects(): Project[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed;
-  } catch {
-    return [];
-  }
+  const state = loadState();
+  return state.projects || [];
 }
 
 export function saveProjects(projects: Project[]) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-  } catch {
-    // ignore
-  }
+  const state = loadState();
+  saveState({ ...state, projects });
 }
 
 export function addProject(projects: Project[], name: string, icon: string, createdBy: string): Project[] {
@@ -52,21 +41,21 @@ export function addTask(
     p.id !== projectId
       ? p
       : {
-          ...p,
-          tasks: [
-            ...p.tasks,
-            {
-              id: Date.now(),
-              title,
-              status: 'todo',
-              points,
-              assigneeId,
-              deadline: '',
-              category,
-              createdBy,
-            } satisfies Task,
-          ],
-        },
+        ...p,
+        tasks: [
+          ...p.tasks,
+          {
+            id: Date.now(),
+            title,
+            status: 'todo',
+            points,
+            assigneeId,
+            deadline: '',
+            category,
+            createdBy,
+          } satisfies Task,
+        ],
+      },
   );
   saveProjects(next);
   return next;
@@ -83,17 +72,17 @@ export function updateTaskStatus(
     p.id !== projectId
       ? p
       : {
-          ...p,
-          tasks: p.tasks.map((t) =>
-            t.id !== taskId
-              ? t
-              : {
-                  ...t,
-                  status,
-                  assigneeId: assigneeId ?? t.assigneeId,
-                },
-          ),
-        },
+        ...p,
+        tasks: p.tasks.map((t) =>
+          t.id !== taskId
+            ? t
+            : {
+              ...t,
+              status,
+              assigneeId: assigneeId ?? t.assigneeId,
+            },
+        ),
+      },
   );
   saveProjects(next);
   return next;

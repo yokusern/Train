@@ -10,25 +10,33 @@ export interface User {
     rank: string;
     role: Role;
     skillScore?: Record<string, number>; // スキルスコア（カテゴリごとの累計）
+    currentTeamId: number | null;
+    joinedTeamIds: number[];
 }
 
 export interface Task {
     id: number;
+    teamId?: number;
     title: string;
     status: TaskStatus;
     points: number;
     assigneeId: number | null;
-    deadline: string;
+    deadline?: string; // ISO date string e.g. "2025-03-31"
     category?: string; // e.g. 'Engineering', 'Design', 'Planning'
     createdBy?: string;
+    createdByUserId?: number;
+    createdAt?: number;
 }
 
 export interface Project {
     id: number;
+    teamId?: number;
     name: string;
     icon: string;
     tasks: Task[];
     createdBy?: string;
+    createdByUserId?: number;
+    createdAt?: number;
 }
 
 export interface Activity {
@@ -46,4 +54,24 @@ export interface ChatMessage {
     avatar: string;
     text: string;
     time: string;
+}
+
+/** チームに所属するメンバーの情報（teamId に紐付いたロール） */
+export interface TeamMember {
+    userId: number;
+    teamId: number;
+    role: Role;
+    joinedAt: number;
+}
+
+/** ポイント付与の履歴エントリ */
+export interface PointHistory {
+    id: number;
+    teamId: number;
+    userId: number;
+    userName: string;
+    taskId: number;
+    taskTitle: string;
+    points: number;
+    awardedAt: number; // timestamp
 }

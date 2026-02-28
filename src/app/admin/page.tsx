@@ -1,208 +1,488 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Header from '../../components/shared/Header';
 import ProjectList from '../../components/shared/ProjectList';
 import ActivityLog from '../../components/shared/ActivityLog';
 import ChatBox from '../../components/shared/ChatBox';
 import CalendarView from '../../components/shared/CalendarView';
-import { TaskStatus, User, Project, ChatMessage } from '../../components/shared/types';
+import { TaskStatus, User, Project, ChatMessage, PointHistory } from '../../components/shared/types';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, TrendingUp, Users, Target, Layout, Calendar } from 'lucide-react';
+import {
+  Trophy, TrendingUp, Users, Target, Layout, Calendar,
+  BarChart3, Copy, Check, KeyRound, Zap, Award, Clock
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { loadProjects, addProject, addTask, updateTaskStatus } from '@/lib/projectStore';
+import {
+  loadState, saveState, isTeamAdmin, getCurrentTeam,
+  projectsForCurrentTeam, addProject, addTaskToProject,
+  updateTaskStatus, pendingReviewCount, getTeamPointHistory,
+  getTeamPointSummary, getTeamMembers,
+} from '@/lib/trainState';
+
+type TabId = 'tasks' | 'calendar' | 'points';
 
 export default function AdminPage() {
-    const router = useRouter();
-    const tabs = [
-        { id: 'tasks', label: 'タスク', icon: <Layout className="w-3 h-3" /> },
-        { id: 'calendar', label: 'カレンダー', icon: <Calendar className="w-3 h-3" /> }
-    ] as const;
-    type TabId = (typeof tabs)[number]['id'];
+  const router = useRouter();
 
-    const [activeTab, setActiveTab] = useState<TabId>('tasks');
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
-    const [projects, setProjects] = useState<Project[] | null>(null);
-    const [users, setUsers] = useState<User[]>([]);
-    const [newProjectName, setNewProjectName] = useState('');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [teamMembers, setTeamMembers] = useState<User[]>([]);
+  const [pointHistory, setPointHistory] = useState<PointHistory[]>([]);
+  const [pointSummary, setPointSummary] = useState<
+    { userId: number; userName: string; totalPoints: number; taskCount: number }[]
+  >([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [joinCode, setJoinCode] = useState('');
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabId>('tasks');
+  const [newProjectName, setNewProjectName] = useState('');
+  const [localChat, setLocalChat] = useState<ChatMessage[]>([]);
+  const [isAILoading, setIsAILoading] = useState(false);
+  const [isReady, setIsReady] = useState(false);
 
-    useEffect(() => {
-        const saved = localStorage.getItem('train_user');
-        if (saved) {
-            const user = JSON.parse(saved);
-            if (user.role !== 'ADMIN') {
-                router.push('/dashboard');
-            } else {
-                setCurrentUser(user);
-                setProjects(loadProjects());
-                // 管理画面のランキング用に、現在ログイン中ユーザーのみ表示（将来拡張用）
-                setUsers([user]);
-            }
-        } else {
-            router.push('/');
-        }
-    }, [router]);
+  const syncFromStorage = useCallback(() => {
+    const state = loadState();
+    if (!state.user || !state.user.currentTeamId) {
+      router.push('/');
+      return;
+    }
+    const teamId = state.user.currentTeamId;
+    if (!isTeamAdmin(state, teamId)) {
+      router.push('/dashboard');
+      return;
+    }
+    setCurrentUser(state.user);
+    setProjects(projectsForCurrentTeam(state));
+    setTeamMembers(getTeamMembers(state, teamId));
+    setPointHistory(getTeamPointHistory(state));
+    setPointSummary(getTeamPointSummary(state));
+    setPendingCount(pendingReviewCount(state));
+    const team = getCurrentTeam(state);
+    setJoinCode(team?.joinCode ?? '');
+    setIsReady(true);
+  }, [router]);
 
-    const [localChat, setLocalChat] = useState<ChatMessage[]>([]);
-    const [isAILoading, setIsAILoading] = useState(false);
+  useEffect(() => {
+    syncFromStorage();
+  }, [syncFromStorage]);
 
-    const handleTaskAction = async (projectId: number, taskId: number, currentStatus: TaskStatus, points: number, currentAssignee: number | null) => {
-        if (!currentUser) return;
+  const handleTaskAction = (
+    projectId: number,
+    taskId: number,
+    currentStatus: TaskStatus,
+  ) => {
+    if (!currentUser) return;
+    let nextStatus: TaskStatus = currentStatus;
+    if (currentStatus === 'in_review') nextStatus = 'done';
+    else if (currentStatus === 'todo' || currentStatus === 'in_progress') nextStatus = 'done';
+    if (nextStatus === currentStatus) return;
 
-        let nextStatus: TaskStatus = currentStatus;
-        let actionType = '';
+    const state = loadState();
+    const next = updateTaskStatus(state, projectId, taskId, nextStatus);
+    setProjects(projectsForCurrentTeam(next));
+    setPendingCount(pendingReviewCount(next));
+    setPointHistory(getTeamPointHistory(next));
+    setPointSummary(getTeamPointSummary(next));
+  };
 
-        if (currentStatus === 'in_review') {
-            nextStatus = 'done';
-            actionType = 'points_awarded';
-        } else if (currentStatus === 'todo' || currentStatus === 'in_progress') {
-            nextStatus = 'done';
-            actionType = 'task_completed';
-        }
+  const handleCreateTask = (
+    projectId: number,
+    title: string,
+    points: number,
+    _assigneeId: number | null,
+    category?: string,
+    deadline?: string,
+  ) => {
+    if (!currentUser) return;
+    const state = loadState();
+    const next = addTaskToProject(state, projectId, title, points, deadline, category);
+    setProjects(projectsForCurrentTeam(next));
+  };
 
-        if (nextStatus === currentStatus) return;
+  const handleCreateProject = () => {
+    const name = newProjectName.trim();
+    if (!name || !currentUser) return;
+    const state = loadState();
+    const next = addProject(state, name, '📁');
+    setProjects(projectsForCurrentTeam(next));
+    setNewProjectName('');
+  };
 
-        try {
-            setProjects(prev => (prev ? updateTaskStatus(prev, projectId, taskId, nextStatus, currentAssignee) : prev));
-        } catch (err) {
-            console.error('Admin task action error:', err);
-        }
+  const handleCopyCode = () => {
+    if (!joinCode) return;
+    navigator.clipboard.writeText(joinCode).then(() => {
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    });
+  };
+
+  const handleAskAI = async (query: string) => {
+    if (!currentUser) return;
+    setIsAILoading(true);
+    const userMsg: ChatMessage = {
+      id: Date.now(),
+      user: currentUser.name,
+      avatar: currentUser.avatar,
+      text: `@ai ${query}`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
+    setLocalChat((prev) => [...prev, userMsg]);
+    try {
+      const res = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: query }),
+      });
+      const { data } = await res.json();
+      const aiMsg: ChatMessage = {
+        id: Date.now() + 1,
+        user: 'Train AI',
+        avatar: '🤖',
+        text: data,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setLocalChat((prev) => [...prev, aiMsg]);
+    } catch {
+      // ignore
+    } finally {
+      setIsAILoading(false);
+    }
+  };
 
-    const handleCreateTask = async (projectId: number, title: string, points: number, assigneeId: number | null, category?: string) => {
-        if (!currentUser) return;
-        setProjects(prev => (prev ? addTask(prev, projectId, title, points, assigneeId, category, currentUser.name) : prev));
-    };
-
-    const handleCreateProject = () => {
-        const name = newProjectName.trim();
-        if (!name || !projects || !currentUser) return;
-        const next = addProject(projects, name, '📁', currentUser.name);
-        setProjects(next);
-        setNewProjectName('');
-    };
-
-    if (!projects || !currentUser) return <div className="p-8 text-center text-slate-400">管理コンソールを同期中...</div>;
-
+  if (!isReady || !currentUser) {
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-500">
-            <Header currentUser={currentUser} isAdmin={true} onSwitchRole={() => router.push('/')} />
-
-            <main className="max-w-7xl mx-auto p-4 sm:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
-                <div className="lg:col-span-3 space-y-8">
-                    <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="flex items-center justify-between border-b border-slate-200 dark:border-white/5 pb-4"
-                    >
-                        <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">管理コンソール</h1>
-                        <div className="flex gap-1 bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-xl glass shadow-inner">
-                            {tabs.map(tab => (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => setActiveTab(tab.id)}
-                                    className={cn(
-                                        "px-4 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center gap-2",
-                                        activeTab === tab.id
-                                            ? "bg-white dark:bg-slate-700 shadow-premium text-slate-900 dark:text-white"
-                                            : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                                    )}
-                                >
-                                    {tab.icon} {tab.label}
-                                </button>
-                            ))}
-                        </div>
-                    </motion.div>
-
-                    {/* プロジェクト追加フォーム */}
-                    <div className="flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 rounded-2xl p-4 shadow-sm">
-                        <input
-                            type="text"
-                            value={newProjectName}
-                            onChange={(e) => setNewProjectName(e.target.value)}
-                            placeholder="新しいプロジェクト名を入力..."
-                            className="flex-1 bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                        />
-                        <button
-                            onClick={handleCreateProject}
-                            disabled={!newProjectName.trim()}
-                            className="px-4 py-2 text-xs font-black uppercase tracking-widest rounded-xl bg-indigo-600 disabled:opacity-40 text-white hover:bg-indigo-500 transition-colors"
-                        >
-                            追加
-                        </button>
-                    </div>
-
-                    {activeTab === 'tasks' ? (
-                        <ProjectList
-                            projects={projects}
-                            isAdmin={true}
-                            currentUser={currentUser}
-                            team={users}
-                            onTaskAction={handleTaskAction}
-                            onCreateTask={handleCreateTask}
-                        />
-                    ) : (
-                        <CalendarView projects={projects} activities={[]} />
-                    )}
-
-                    <ChatBox
-                        messages={localChat}
-                        currentUser={currentUser}
-                        onSendMessage={(text) => setLocalChat(prev => [...prev, { id: Date.now(), user: currentUser.name, avatar: currentUser.avatar, text, time: 'Now' }])}
-                        onAskAI={() => { }}
-                        isAILoading={false}
-                    />
-                </div>
-
-                <div className="lg:col-span-1 space-y-8">
-                    <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/5 shadow-premium p-6">
-                        <div className="flex items-center justify-between mb-6">
-                            <h3 className="font-black text-xs uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                                <Trophy className="w-4 h-4 text-amber-500" /> リーダーボード
-                            </h3>
-                            <TrendingUp className="w-4 h-4 text-emerald-500" />
-                        </div>
-                        <div className="space-y-4">
-                            {users.sort((a, b) => b.points - a.points).map((user, idx) => (
-                                <div key={user.id} className="flex items-center justify-between group">
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-xs font-black text-slate-300 group-hover:text-indigo-500 transition-colors w-4">{idx + 1}</span>
-                                        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/5">
-                                            {user.avatar}
-                                        </div>
-                                        <div>
-                                            <p className="text-xs font-bold text-slate-900 dark:text-white">{user.name}</p>
-                                            <p className="text-[10px] text-slate-400 uppercase tracking-tighter">{user.rank}</p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-xs font-black text-slate-900 dark:text-white">{user.points} pt</p>
-                                        {user.pendingPoints > 0 && (
-                                            <p className="text-[9px] font-bold text-amber-600">+{user.pendingPoints} PENDING</p>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </section>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-white/5 shadow-premium">
-                            <Users className="w-4 h-4 text-indigo-500 mb-2" />
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">チーム人数</p>
-                            <p className="text-lg font-black text-slate-900 dark:text-white">{users.length}</p>
-                        </div>
-                        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-white/5 shadow-premium">
-                            <Target className="w-4 h-4 text-emerald-500 mb-2" />
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">プロジェクト数</p>
-                            <p className="text-lg font-black text-slate-900 dark:text-white">{projects.length}</p>
-                        </div>
-                    </div>
-
-                    <ActivityLog activities={[]} />
-                </div>
-            </main>
-        </div>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <p className="text-slate-400 text-sm font-bold animate-pulse">管理コンソールを同期中...</p>
+      </div>
     );
+  }
+
+  const tabs = [
+    { id: 'tasks' as TabId, label: 'タスク', icon: <Layout className="w-3 h-3" /> },
+    { id: 'calendar' as TabId, label: 'カレンダー', icon: <Calendar className="w-3 h-3" /> },
+    {
+      id: 'points' as TabId,
+      label: 'ポイント集計',
+      icon: <BarChart3 className="w-3 h-3" />,
+    },
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-500">
+      <Header
+        currentUser={currentUser}
+        isAdmin={true}
+        pendingCount={pendingCount}
+        onSwitchRole={() => router.push('/')}
+      />
+
+      <main className="max-w-7xl mx-auto p-4 sm:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
+        {/* ── 左カラム（メインコンテンツ） ── */}
+        <div className="lg:col-span-3 space-y-8">
+          {/* タイトル & タブ */}
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-between border-b border-slate-200 dark:border-white/5 pb-4"
+          >
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">
+                管理コンソール
+              </h1>
+              {pendingCount > 0 && (
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-rose-500 text-white text-[10px] font-black animate-pulse">
+                  {pendingCount}
+                </span>
+              )}
+            </div>
+            <div className="flex gap-1 bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-xl shadow-inner">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    'px-4 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center gap-2',
+                    activeTab === tab.id
+                      ? 'bg-white dark:bg-slate-700 shadow text-slate-900 dark:text-white'
+                      : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300',
+                  )}
+                >
+                  {tab.icon} {tab.label}
+                  {tab.id === 'tasks' && pendingCount > 0 && (
+                    <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black">
+                      {pendingCount}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* プロジェクト追加フォーム（タスクタブのみ） */}
+          {activeTab === 'tasks' && (
+            <div className="flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 rounded-2xl p-4 shadow-sm">
+              <input
+                type="text"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateProject()}
+                placeholder="新しいプロジェクト名を入力..."
+                className="flex-1 bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+              <button
+                onClick={handleCreateProject}
+                disabled={!newProjectName.trim()}
+                className="px-4 py-2 text-xs font-black uppercase tracking-widest rounded-xl bg-indigo-600 disabled:opacity-40 text-white hover:bg-indigo-500 transition-colors"
+              >
+                追加
+              </button>
+            </div>
+          )}
+
+          {/* タブコンテンツ */}
+          <AnimatePresence mode="wait">
+            {activeTab === 'tasks' && (
+              <motion.div
+                key="tasks"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+              >
+                <ProjectList
+                  projects={projects}
+                  isAdmin={true}
+                  currentUser={currentUser}
+                  team={teamMembers}
+                  onTaskAction={(projectId, taskId, currentStatus) =>
+                    handleTaskAction(projectId, taskId, currentStatus)
+                  }
+                  onCreateTask={handleCreateTask}
+                />
+              </motion.div>
+            )}
+
+            {activeTab === 'calendar' && (
+              <motion.div
+                key="calendar"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+              >
+                <CalendarView projects={projects} activities={[]} />
+              </motion.div>
+            )}
+
+            {activeTab === 'points' && (
+              <motion.div
+                key="points"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                {/* ポイント集計サマリー */}
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm overflow-hidden">
+                  <div className="p-5 border-b border-slate-100 dark:border-white/5 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-indigo-500" />
+                    <h3 className="font-black text-xs uppercase tracking-widest text-slate-700 dark:text-slate-300">
+                      メンバー別ポイント集計
+                    </h3>
+                  </div>
+                  {pointSummary.length === 0 ? (
+                    <div className="py-12 text-center">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        まだポイント履歴がありません
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-4 space-y-3">
+                      {pointSummary.map((s, idx) => (
+                        <div
+                          key={s.userId}
+                          className="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                        >
+                          <span className="text-xs font-black text-slate-400 w-5">{idx + 1}</span>
+                          <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center font-black text-sm text-indigo-600 dark:text-indigo-400">
+                            {s.userName.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-black text-slate-900 dark:text-white">{s.userName}</p>
+                            <p className="text-[10px] text-slate-400 font-bold">{s.taskCount} タスク完了</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-black text-indigo-600 dark:text-indigo-400">
+                              {s.totalPoints}
+                              <span className="text-[10px] text-slate-400 font-bold ml-1">PT</span>
+                            </p>
+                          </div>
+                          {/* ポイントバー */}
+                          <div className="w-24 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-indigo-500 rounded-full transition-all"
+                              style={{
+                                width: `${Math.min(100, (s.totalPoints / (pointSummary[0]?.totalPoints || 1)) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* ポイント付与履歴 */}
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm overflow-hidden">
+                  <div className="p-5 border-b border-slate-100 dark:border-white/5 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-500" />
+                    <h3 className="font-black text-xs uppercase tracking-widest text-slate-700 dark:text-slate-300">
+                      ポイント付与履歴
+                    </h3>
+                  </div>
+                  {pointHistory.length === 0 ? (
+                    <div className="py-12 text-center">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        まだ履歴がありません
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100 dark:divide-white/5">
+                      {pointHistory.map((h) => (
+                        <div
+                          key={h.id}
+                          className="flex items-center gap-4 px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                            <Zap className="w-4 h-4 text-amber-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                              {h.taskTitle}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-bold">
+                              {h.userName} ·{' '}
+                              {new Date(h.awardedAt).toLocaleDateString('ja-JP', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 px-2.5 py-1 bg-indigo-50 dark:bg-indigo-500/10 rounded-lg border border-indigo-100 dark:border-indigo-500/20">
+                            <Award className="w-3 h-3 text-indigo-500" />
+                            <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">
+                              +{h.points} PT
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <ChatBox
+            messages={localChat}
+            currentUser={currentUser}
+            onSendMessage={(text) =>
+              setLocalChat((prev) => [
+                ...prev,
+                {
+                  id: Date.now(),
+                  user: currentUser.name,
+                  avatar: currentUser.avatar,
+                  text,
+                  time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                },
+              ])
+            }
+            onAskAI={handleAskAI}
+            isAILoading={isAILoading}
+          />
+        </div>
+
+        {/* ── 右カラム（サイドバー） ── */}
+        <div className="lg:col-span-1 space-y-6">
+          {/* 参加コード表示 */}
+          <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <KeyRound className="w-4 h-4 text-purple-500" />
+              <h3 className="font-black text-xs uppercase tracking-widest text-slate-400">チーム参加コード</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 text-center">
+                <span className="text-2xl font-black tracking-[0.3em] text-indigo-600 dark:text-indigo-400 font-mono">
+                  {joinCode}
+                </span>
+              </div>
+              <button
+                onClick={handleCopyCode}
+                className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-colors"
+                title="コードをコピー"
+              >
+                {copiedCode ? (
+                  <Check className="w-4 h-4 text-emerald-500" />
+                ) : (
+                  <Copy className="w-4 h-4 text-slate-500" />
+                )}
+              </button>
+            </div>
+            <p className="mt-2 text-[10px] text-slate-400 text-center font-bold">
+              このコードをメンバーに共有してください
+            </p>
+          </section>
+
+          {/* リーダーボード */}
+          <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="font-black text-xs uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-amber-500" /> リーダーボード
+              </h3>
+              <TrendingUp className="w-4 h-4 text-emerald-500" />
+            </div>
+            {pointSummary.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-4 font-bold">まだデータがありません</p>
+            ) : (
+              <div className="space-y-4">
+                {pointSummary.slice(0, 5).map((s, idx) => (
+                  <div key={s.userId} className="flex items-center justify-between group">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-black text-slate-300 group-hover:text-indigo-500 transition-colors w-4">
+                        {idx + 1}
+                      </span>
+                      <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/5">
+                        {s.userName.slice(0, 2).toUpperCase()}
+                      </div>
+                      <p className="text-xs font-bold text-slate-900 dark:text-white">{s.userName}</p>
+                    </div>
+                    <p className="text-xs font-black text-slate-900 dark:text-white">{s.totalPoints} pt</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* チーム統計 */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm">
+              <Users className="w-4 h-4 text-indigo-500 mb-2" />
+              <p className="text-[10px] font-bold text-slate-400 uppercase">チーム人数</p>
+              <p className="text-lg font-black text-slate-900 dark:text-white">{teamMembers.length}</p>
+            </div>
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm">
+              <Target className="w-4 h-4 text-emerald-500 mb-2" />
+              <p className="text-[10px] font-bold text-slate-400 uppercase">プロジェクト数</p>
+              <p className="text-lg font-black text-slate-900 dark:text-white">{projects.length}</p>
+            </div>
+          </div>
+
+          <ActivityLog activities={[]} />
+        </div>
+      </main>
+    </div>
+  );
 }
