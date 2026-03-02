@@ -22,6 +22,8 @@ export async function POST(req: Request) {
       name,
       icon,
       tasks: [],
+      createdAt: Date.now(),
+      createdByUserId: 0, // Mock id
     })
   } catch (error: unknown) {
     console.error('Create project error:', error)

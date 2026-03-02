@@ -10,7 +10,12 @@ import { TaskStatus, User, Project, ChatMessage, Activity } from '../../componen
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { loadProjects, updateTaskStatus } from '@/lib/projectStore';
+import {
+    loadState,
+    projectsForCurrentTeam,
+    updateTaskStatus,
+    pendingReviewCount
+} from '@/lib/trainState';
 import { Sparkles, Layout, Calendar } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -24,12 +29,18 @@ export default function DashboardPage() {
     const [activeTab, setActiveTab] = useState<TabId>('tasks');
     const [currentUser, setCurrentUser] = useState<User | null>(() => {
         if (typeof window === 'undefined') return null;
-        const saved = window.localStorage.getItem('train_user');
-        return saved ? JSON.parse(saved) : null;
+        const state = loadState();
+        return state.user;
     });
     const [projects, setProjects] = useState<Project[] | null>(() => {
-        if (typeof window === 'undefined' || !localStorage.getItem('train_user')) return null;
-        return loadProjects();
+        if (typeof window === 'undefined') return null;
+        const state = loadState();
+        return projectsForCurrentTeam(state);
+    });
+    const [pendingCount, setPendingCount] = useState<number>(() => {
+        if (typeof window === 'undefined') return 0;
+        const state = loadState();
+        return pendingReviewCount(state);
     });
 
     useEffect(() => {
@@ -43,7 +54,7 @@ export default function DashboardPage() {
     const [localChat, setLocalChat] = useState<ChatMessage[]>([]);
     const [isAILoading, setIsAILoading] = useState(false);
 
-    const handleTaskAction = async (projectId: number, taskId: number, currentStatus: TaskStatus, points: number, currentAssignee: number | null) => {
+    const handleTaskAction = async (projectId: number, taskId: number, currentStatus: TaskStatus) => {
         if (!currentUser) return;
 
         let nextStatus: TaskStatus = currentStatus;
@@ -53,7 +64,10 @@ export default function DashboardPage() {
         if (nextStatus === currentStatus) return;
 
         try {
-            setProjects(prev => (prev ? updateTaskStatus(prev, projectId, taskId, nextStatus, currentUser.id) : prev));
+            const state = loadState();
+            const next = updateTaskStatus(state, projectId, taskId, nextStatus);
+            setProjects(projectsForCurrentTeam(next));
+            setPendingCount(pendingReviewCount(next));
         } catch (err) {
             console.error('Task action error:', err);
         }
@@ -112,7 +126,12 @@ export default function DashboardPage() {
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-500">
-            <Header currentUser={currentUser} isAdmin={false} onSwitchRole={() => router.push('/')} />
+            <Header
+                currentUser={currentUser}
+                isAdmin={false}
+                pendingCount={pendingCount}
+                onSwitchRole={() => router.push('/')}
+            />
 
             <main className="max-w-7xl mx-auto p-4 sm:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
                 <div className="lg:col-span-3 space-y-8">

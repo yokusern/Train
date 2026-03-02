@@ -28,6 +28,8 @@ export async function POST(request: Request) {
       rank: role === 'ADMIN' ? 'Admin' : 'Member',
       role,
       skillScore: {},
+      currentTeamId: null,
+      joinedTeamIds: [],
     }
 
     return NextResponse.json(user)
