@@ -9,10 +9,11 @@ import { loadState, setCurrentTeam, isTeamAdmin } from '@/lib/trainState';
 interface HeaderProps {
     currentUser: User;
     isAdmin: boolean;
+    pendingCount?: number;
     onSwitchRole: () => void;
 }
 
-export default function Header({ currentUser, isAdmin, onSwitchRole }: HeaderProps) {
+export default function Header({ currentUser, isAdmin, pendingCount = 0, onSwitchRole }: HeaderProps) {
     const handleLogout = () => {
         try {
             localStorage.removeItem('train_user');
@@ -107,7 +108,14 @@ export default function Header({ currentUser, isAdmin, onSwitchRole }: HeaderPro
                     <div className="flex items-center gap-2">
                         <button className="p-2.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-xl transition-all relative">
                             <Bell className="w-5 h-5" />
-                            <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full border-2 border-white dark:border-slate-900" />
+                            {pendingCount > 0 && (
+                                <span className="absolute top-2 right-2 w-4 h-4 bg-rose-500 rounded-full border-2 border-white dark:border-slate-900 flex items-center justify-center text-[8px] font-black text-white">
+                                    {pendingCount}
+                                </span>
+                            )}
+                            {pendingCount === 0 && (
+                                <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white dark:border-slate-900" />
+                            )}
                         </button>
                         <div className="w-px h-6 bg-slate-200 dark:bg-white/10 mx-2" />
                         <div className="flex items-center gap-3 pl-2">
