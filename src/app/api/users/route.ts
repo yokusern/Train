@@ -1,41 +1,52 @@
-import { NextResponse } from 'next/server'
-import { initialTeam } from '@/lib/mockData'
-import type { User } from '@/components/shared/types'
+import { NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 
-// GET /api/users - Fetch all users for ranking/leaderboard (demo)
+export const dynamic = 'force-dynamic';
+
+// GET /api/users - Fetch all users for ranking/leaderboard
 export async function GET() {
-  return NextResponse.json([...initialTeam].sort((a, b) => b.points - a.points))
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json({ error: 'Database connection not available at build time' }, { status: 503 });
+  }
+  try {
+    const users = await (prisma as any).user.findMany({
+      orderBy: { points: 'desc' },
+    });
+    return NextResponse.json(users);
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
+  }
 }
 
-// POST /api/users - Create/Login user (demo)
+// POST /api/users - Create/Login user
 export async function POST(request: Request) {
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json({ error: 'Database connection not available at build time' }, { status: 503 });
+  }
   try {
-    const body = await request.json().catch(() => null)
-    const name = typeof body?.name === 'string' ? body.name.trim() : ''
-    const role = body?.role === 'ADMIN' || body?.role === 'MEMBER' ? body.role : null
+    const body = await request.json().catch(() => null);
+    const { name, email: bodyEmail } = body || {};
+    const nameStr = typeof name === 'string' ? name.trim() : '';
+    const email = typeof bodyEmail === 'string' ? bodyEmail.trim() : `${nameStr.toLowerCase()}@example.com`;
 
-    if (!name || !role) {
-      return NextResponse.json({ error: 'name and role are required' }, { status: 400 })
+    if (!nameStr) {
+      return NextResponse.json({ error: 'name is required' }, { status: 400 });
     }
 
-    const avatar = name.slice(0, 2).toUpperCase()
-    const user: User = {
-      id: Date.now(),
-      name,
-      avatar,
-      points: 0,
-      pendingPoints: 0,
-      rank: role === 'ADMIN' ? 'Admin' : 'Member',
-      role,
-      skillScore: {},
-      currentTeamId: null,
-      joinedTeamIds: [],
-    }
+    const resUser = await (prisma as any).user.upsert({
+      update: { name: nameStr },
+      create: {
+        name: nameStr,
+        email,
+        avatar: nameStr.slice(0, 2).toUpperCase(),
+        role: 'MEMBER',
+        skillScore: {},
+      },
+    });
 
-    return NextResponse.json(user)
-  } catch (error: unknown) {
-    console.error('Create/Login user error:', error)
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json(resUser);
+  } catch (error: any) {
+    console.error('Create/Login user error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

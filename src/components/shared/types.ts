@@ -1,9 +1,10 @@
-export type Role = 'ADMIN' | 'MEMBER';
+export type Role = 'MEMBER' | 'ADMIN';
 export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done';
 
 export interface User {
     id: number;
     name: string;
+    email: string;
     avatar: string;
     points: number;
     pendingPoints: number; // 承認待ちポイント
@@ -12,6 +13,13 @@ export interface User {
     skillScore?: Record<string, number>; // スキルスコア（カテゴリごとの累計）
     currentTeamId: number | null;
     joinedTeamIds: number[];
+}
+
+export interface Team {
+    id: number;
+    name: string;
+    joinCode: string;
+    adminUserId: number;
 }
 
 export interface Task {

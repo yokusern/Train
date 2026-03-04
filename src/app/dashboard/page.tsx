@@ -6,16 +6,10 @@ import ProjectList from '../../components/shared/ProjectList';
 import ActivityLog from '../../components/shared/ActivityLog';
 import ChatBox from '../../components/shared/ChatBox';
 import CalendarView from '../../components/shared/CalendarView';
-import { TaskStatus, User, Project, ChatMessage, Activity } from '../../components/shared/types';
+import { TaskStatus, User, Project, ChatMessage, Activity, Team } from '../../components/shared/types';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import {
-    loadState,
-    projectsForCurrentTeam,
-    updateTaskStatus,
-    pendingReviewCount
-} from '@/lib/trainState';
 import { Sparkles, Layout, Calendar } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -27,29 +21,64 @@ export default function DashboardPage() {
     type TabId = (typeof tabs)[number]['id'];
 
     const [activeTab, setActiveTab] = useState<TabId>('tasks');
-    const [currentUser, setCurrentUser] = useState<User | null>(() => {
-        if (typeof window === 'undefined') return null;
-        const state = loadState();
-        return state.user;
-    });
-    const [projects, setProjects] = useState<Project[] | null>(() => {
-        if (typeof window === 'undefined') return null;
-        const state = loadState();
-        return projectsForCurrentTeam(state);
-    });
-    const [pendingCount, setPendingCount] = useState<number>(() => {
-        if (typeof window === 'undefined') return 0;
-        const state = loadState();
-        return pendingReviewCount(state);
-    });
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [teams, setTeams] = useState<Team[]>([]);
+    const [activities, setActivities] = useState<Activity[]>([]);
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+    const [pendingCount, setPendingCount] = useState<number>(0);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        if (!currentUser) {
+        const savedUser = localStorage.getItem('train_user');
+        if (savedUser) {
+            setCurrentUser(JSON.parse(savedUser));
+        } else {
             router.push('/');
         }
-    }, [currentUser, router]);
+    }, [router]);
 
-    const [chatMessages] = useState<ChatMessage[]>([]);
+    const fetchData = async () => {
+        if (!currentUser?.id || !currentUser?.currentTeamId) return;
+        try {
+            const [projRes, teamRes, actRes, chatRes] = await Promise.all([
+                fetch(`/api/projects?teamId=${currentUser.currentTeamId}`),
+                fetch(`/api/teams?userId=${currentUser.id}`),
+                fetch(`/api/activity?teamId=${currentUser.currentTeamId}`),
+                fetch(`/api/chat?teamId=${currentUser.currentTeamId}`)
+            ]);
+            const projData = await projRes.json();
+            const teamData = await teamRes.json();
+            const actData = await actRes.json();
+            const chatData = await chatRes.json();
+
+            if (!projData.error) setProjects(projData);
+            if (!teamData.error) setTeams(teamData);
+            if (!actData.error) setActivities(actData.map((a: any) => ({
+                id: a.id,
+                user: a.user.name,
+                avatar: a.user.avatar,
+                action: a.action,
+                target: a.target,
+                time: new Date(a.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                points: a.pointsEarned
+            })));
+            if (!chatData.error) setChatMessages(chatData);
+
+            // Simplified pending count from projects
+            const count = projData.reduce((acc: number, p: Project) =>
+                acc + (p.tasks?.filter(t => t.status === 'in_review').length || 0), 0);
+            setPendingCount(count);
+        } catch (err) {
+            console.error('Fetch dashboard data error:', err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (currentUser) fetchData();
+    }, [currentUser?.currentTeamId]);
 
     const [localChat, setLocalChat] = useState<ChatMessage[]>([]);
     const [isAILoading, setIsAILoading] = useState(false);
@@ -64,10 +93,12 @@ export default function DashboardPage() {
         if (nextStatus === currentStatus) return;
 
         try {
-            const state = loadState();
-            const next = updateTaskStatus(state, projectId, taskId, nextStatus);
-            setProjects(projectsForCurrentTeam(next));
-            setPendingCount(pendingReviewCount(next));
+            const res = await fetch('/api/tasks', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: taskId, status: nextStatus, assigneeId: currentUser.id })
+            });
+            if (res.ok) fetchData();
         } catch (err) {
             console.error('Task action error:', err);
         }
@@ -120,7 +151,14 @@ export default function DashboardPage() {
         }
     };
 
-    if (!projects || !currentUser) return <div className="p-8 text-center text-slate-400">環境を同期中...</div>;
+    if (isLoading || !currentUser) return (
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+            <div className="text-center space-y-4">
+                <Sparkles className="w-8 h-8 text-indigo-500 animate-pulse mx-auto" />
+                <p className="text-slate-400 text-sm font-bold">環境を同期中...</p>
+            </div>
+        </div>
+    );
 
     const allMessages = [...chatMessages, ...localChat];
 
@@ -128,9 +166,15 @@ export default function DashboardPage() {
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-500">
             <Header
                 currentUser={currentUser}
-                isAdmin={false}
+                isAdmin={currentUser.role === 'ADMIN'}
+                teams={teams}
                 pendingCount={pendingCount}
                 onSwitchRole={() => router.push('/')}
+                onSwitchTeam={async (teamId) => {
+                    const updatedUser = { ...currentUser, currentTeamId: teamId };
+                    localStorage.setItem('train_user', JSON.stringify(updatedUser));
+                    setCurrentUser(updatedUser);
+                }}
             />
 
             <main className="max-w-7xl mx-auto p-4 sm:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -182,7 +226,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="lg:col-span-1 space-y-8">
-                    <ActivityLog activities={[]} />
+                    <ActivityLog activities={activities} />
                 </div>
             </main>
         </div>

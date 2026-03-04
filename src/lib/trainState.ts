@@ -71,6 +71,7 @@ export function createUser(name: string): User {
   return {
     id: Date.now(),
     name,
+    email: `${name.toLowerCase()}@example.com`,
     avatar: name.slice(0, 2).toUpperCase(),
     points: 0,
     pendingPoints: 0,
@@ -155,11 +156,11 @@ export function joinTeamByCode(
   const newMember: TeamMember = alreadyMember
     ? null!
     : {
-        userId: state.user.id,
-        teamId: team.id,
-        role: 'MEMBER',
-        joinedAt: Date.now(),
-      };
+      userId: state.user.id,
+      teamId: team.id,
+      role: 'MEMBER',
+      joinedAt: Date.now(),
+    };
 
   // チームの admin かどうかを判定してロールを設定
   const isAdmin = team.adminUserId === state.user.id;
@@ -244,6 +245,7 @@ export function getTeamMembers(state: TrainState, teamId: number): User[] {
     return {
       id: m.userId,
       name: `User#${m.userId}`,
+      email: `user${m.userId}@example.com`,
       avatar: 'U',
       points: 0,
       pendingPoints: 0,

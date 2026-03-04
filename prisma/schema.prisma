@@ -1,24 +1,14 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-
 enum Role {
-  member
-  admin
-}
-
-enum ProjectStatus {
-  active
-  completed
-  archived
+  MEMBER
+  ADMIN
 }
 
 enum TaskStatus {
@@ -28,88 +18,111 @@ enum TaskStatus {
   done
 }
 
-enum ActionType {
-  task_created
-  task_completed
-  comment_added
-  points_awarded
-}
-
-model User {
-  id             BigInt        @id @default(autoincrement())
+model user {
+  id             Int          @id @default(autoincrement())
   name           String
-  email          String        @unique
-  avatar_url     String?
-  role           Role          @default(member)
-  total_points   Int           @default(0)
-  pending_points Int           @default(0)
-  skill_score    Json? // e.g., {"Development": 1500, "Design": 800, "Planning": 300}
-  created_at     DateTime      @default(now())
-  tasks          Task[]
-  activity_logs  ActivityLog[]
-  comments       Comment[]
+  email          String       @unique
+  avatar         String?
+  points         Int          @default(0)
+  pendingPoints  Int          @default(0)
+  rank           String       @default("Rookie")
+  role           Role         @default(MEMBER)
+  skillScore     Json?        // e.g., {"Development": 1500}
+  currentTeamId  Int?
+  joinedTeams    teamMember[]
+  createdTasks   task[]       @relation("TaskCreator")
+  assignedTasks  task[]       @relation("TaskAssignee")
+  activities     activityLog[]
+  comments       comment[]
 
   @@map("users")
 }
 
-model Project {
-  id            BigInt        @id @default(autoincrement())
-  name          String
-  description   String?
-  icon          String?
-  status        ProjectStatus @default(active)
-  created_at    DateTime      @default(now())
-  tasks         Task[]
-  activity_logs ActivityLog[]
-  comments      Comment[]
+model team {
+  id          Int          @id @default(autoincrement())
+  name        String
+  joinCode    String       @unique
+  adminUserId Int
+  members     teamMember[]
+  projects    project[]
+  tasks       task[]
+  activities  activityLog[]
+
+  @@map("teams")
+}
+
+model teamMember {
+  userId   Int
+  teamId   Int
+  user     user     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team     team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  role     Role     @default(MEMBER)
+  joinedAt DateTime @default(now())
+
+  @@id([userId, teamId])
+  @@map("team_members")
+}
+
+model project {
+  id              Int           @id @default(autoincrement())
+  teamId          Int
+  team            team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  name            String
+  icon            String?       @default("📁")
+  createdByUserId Int
+  createdAt       DateTime      @default(now())
+  tasks           task[]
+  activities      activityLog[]
 
   @@map("projects")
 }
 
-model Task {
-  id                BigInt     @id @default(autoincrement())
-  project_id        BigInt
-  project           Project    @relation(fields: [project_id], references: [id], onDelete: Cascade)
-  title             String
-  content           String?
-  status            TaskStatus @default(todo)
-  assignee_id       BigInt?
-  assignee          User?      @relation(fields: [assignee_id], references: [id], onDelete: SetNull)
-  difficulty_points Int        @default(10)
-  category          String?
-  deadline          DateTime?
-  created_at        DateTime   @default(now())
-  completed_at      DateTime?
-  comments          Comment[]
+model task {
+  id              Int          @id @default(autoincrement())
+  teamId          Int
+  team            team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  projectId       Int
+  project         project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title           String
+  status          TaskStatus   @default(todo)
+  points          Int          @default(10)
+  assigneeId      Int?
+  assignee        user?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdByUserId Int
+  creator         user         @relation("TaskCreator", fields: [createdByUserId], references: [id])
+  deadline        DateTime?
+  category        String?
+  createdAt       DateTime     @default(now())
+  completedAt     DateTime?
+  comments        comment[]
 
   @@map("tasks")
 }
 
-model ActivityLog {
-  id            BigInt     @id @default(autoincrement())
-  user_id       BigInt?
-  user          User?      @relation(fields: [user_id], references: [id], onDelete: SetNull)
-  project_id    BigInt?
-  project       Project?    @relation(fields: [project_id], references: [id], onDelete: Cascade)
-  action_type   ActionType
-  target_id     BigInt?
-  points_earned Int        @default(0)
-  message       String?
-  created_at    DateTime   @default(now())
+model activityLog {
+  id           Int      @id @default(autoincrement())
+  userId       Int?
+  user         user?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  teamId       Int
+  team         team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  projectId    Int?
+  project      project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  action       String
+  target       String
+  pointsEarned Int      @default(0)
+  createdAt    DateTime @default(now())
 
   @@map("activity_logs")
 }
 
-model Comment {
-  id         BigInt   @id @default(autoincrement())
-  task_id    BigInt?
-  task       Task?    @relation(fields: [task_id], references: [id], onDelete: Cascade)
-  project_id BigInt
-  project    Project  @relation(fields: [project_id], references: [id], onDelete: Cascade)
-  user_id    BigInt
-  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+model comment {
+  id         Int      @id @default(autoincrement())
+  taskId     Int?
+  task       task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId     Int
+  user       user     @relation(fields: [userId], references: [id], onDelete: Cascade)
   content    String
-  created_at DateTime @default(now())
+  createdAt  DateTime @default(now())
 
   @@map("comments")
 }

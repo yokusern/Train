@@ -91,11 +91,6 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                     <h3 className="font-bold text-slate-900 dark:text-white">{project.name}</h3>
                                     <p className="text-xs text-slate-500">
                                         {project.tasks.length} 個のタスク
-                                        {project.createdBy && (
-                                            <span className="ml-2 text-[10px] text-slate-400">
-                                                作成: {project.createdBy}
-                                            </span>
-                                        )}
                                     </p>
                                 </div>
                             </div>

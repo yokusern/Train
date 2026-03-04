@@ -1,33 +1,56 @@
-import { NextResponse } from 'next/server'
-import { initialProjects } from '@/lib/mockData'
+import { NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 
-// GET /api/projects - Fetch all projects with their tasks (demo)
-export async function GET() {
-  return NextResponse.json(initialProjects)
+export const dynamic = 'force-dynamic';
+
+// GET /api/projects - Fetch projects for a specific team
+export async function GET(req: Request) {
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json({ error: 'Database connection not available at build time' }, { status: 503 });
+  }
+  const { searchParams } = new URL(req.url);
+  const teamId = searchParams.get('teamId');
+
+  if (!teamId || isNaN(parseInt(teamId))) {
+    return NextResponse.json({ error: 'Valid teamId is required' }, { status: 400 });
+  }
+
+  try {
+    const projects = await (prisma as any).project.findMany({
+      where: { teamId: parseInt(teamId) },
+      include: { tasks: true },
+    });
+    return NextResponse.json(projects);
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 });
+  }
 }
 
-// POST /api/projects - Create a new project (demo; no persistence)
+// POST /api/projects - Create a new project
 export async function POST(req: Request) {
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json({ error: 'Database connection not available at build time' }, { status: 503 });
+  }
   try {
-    const body = await req.json().catch(() => null)
-    const name = typeof body?.name === 'string' ? body.name.trim() : ''
-    const icon = typeof body?.icon === 'string' ? body.icon : '📦'
+    const body = await req.json().catch(() => null);
+    const { name, icon, teamId, createdByUserId } = body || {};
 
-    if (!name) {
-      return NextResponse.json({ error: 'プロジェクト名が必要です' }, { status: 400 })
+    if (!name || !teamId || !createdByUserId || isNaN(parseInt(teamId)) || isNaN(parseInt(createdByUserId))) {
+      return NextResponse.json({ error: 'name, valid teamId, and valid createdByUserId are required' }, { status: 400 });
     }
 
-    return NextResponse.json({
-      id: Date.now(),
-      name,
-      icon,
-      tasks: [],
-      createdAt: Date.now(),
-      createdByUserId: 0, // Mock id
-    })
-  } catch (error: unknown) {
-    console.error('Create project error:', error)
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    const resProject = await (prisma as any).project.create({
+      data: {
+        name,
+        icon: icon || '📁',
+        teamId: parseInt(teamId),
+        createdByUserId: parseInt(createdByUserId),
+      },
+    });
+
+    return NextResponse.json(resProject);
+  } catch (error: any) {
+    console.error('Create project error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

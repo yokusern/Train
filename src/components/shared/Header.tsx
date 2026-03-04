@@ -3,17 +3,18 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { LogOut, Bell, Award, Train } from 'lucide-react';
-import { User } from './types';
-import { loadState, setCurrentTeam, isTeamAdmin } from '@/lib/trainState';
+import { User, Team } from './types';
 
 interface HeaderProps {
     currentUser: User;
     isAdmin: boolean;
+    teams?: Team[];
     pendingCount?: number;
     onSwitchRole: () => void;
+    onSwitchTeam?: (teamId: number) => void;
 }
 
-export default function Header({ currentUser, isAdmin, pendingCount = 0, onSwitchRole }: HeaderProps) {
+export default function Header({ currentUser, isAdmin, teams = [], pendingCount = 0, onSwitchRole, onSwitchTeam }: HeaderProps) {
     const handleLogout = () => {
         try {
             localStorage.removeItem('train_user');
@@ -56,35 +57,23 @@ export default function Header({ currentUser, isAdmin, pendingCount = 0, onSwitc
                 <div className="flex items-center gap-6">
                     {/* Team selector */}
                     <div className="hidden sm:flex items-center gap-2">
-                        {(() => {
-                            const state = loadState();
-                            const user = state.user;
-                            const teams = user ? state.teams.filter(t => user.joinedTeamIds.includes(t.id)) : [];
-                            const current = user?.currentTeamId ? teams.find(t => t.id === user.currentTeamId) : null;
-                            if (!user || teams.length === 0) return null;
-                            return (
-                                <select
-                                    value={user.currentTeamId ?? ''}
-                                    onChange={(e) => {
-                                        const teamId = Number(e.target.value);
-                                        const next = setCurrentTeam(state, teamId);
-                                        // adjust destination if admin page access changes
-                                        const admin = isTeamAdmin(next, teamId);
-                                        const onAdminPage = window.location.pathname.startsWith('/admin');
-                                        if (onAdminPage && !admin) window.location.href = '/dashboard';
-                                        else window.location.reload();
-                                    }}
-                                    className="bg-white/5 border border-white/10 text-white text-xs font-black rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500"
-                                    aria-label="チーム切り替え"
-                                >
-                                    {teams.map(t => (
-                                        <option key={t.id} value={t.id}>
-                                            {t.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            );
-                        })()}
+                        {teams && teams.length > 0 && (
+                            <select
+                                value={currentUser.currentTeamId ?? ''}
+                                onChange={(e) => {
+                                    const teamId = Number(e.target.value);
+                                    if (onSwitchTeam) onSwitchTeam(teamId);
+                                }}
+                                className="bg-white/5 border border-white/10 text-white text-xs font-black rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500"
+                                aria-label="チーム切り替え"
+                            >
+                                {teams.map(t => (
+                                    <option key={t.id} value={t.id}>
+                                        {t.name}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
                     </div>
                     {isAdmin && (
                         <div className="hidden sm:flex items-center gap-4 bg-slate-100 dark:bg-slate-800/50 px-4 py-2 rounded-2xl border border-slate-200 dark:border-white/5">

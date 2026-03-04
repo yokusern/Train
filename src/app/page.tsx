@@ -4,26 +4,26 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Train, User as UserIcon, Sparkles, LogIn, Loader2, Users, KeyRound, Copy, Check } from 'lucide-react';
-import { loadState, saveState, createUser, createTeam, joinTeamByCode, isTeamAdmin, getCurrentTeam } from '@/lib/trainState';
+import type { User, Team } from '@/components/shared/types';
 
 export default function LandingPage() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [teamName, setTeamName] = useState('');
   const [joinCode, setJoinCode] = useState('');
-  const [hasUser, setHasUser] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [copiedCode, setCopiedCode] = useState(false);
 
   useEffect(() => {
-    const state = loadState();
-    if (state.user) {
-      setHasUser(true);
-      if (state.user.currentTeamId) {
-        // ロールに基づいてリダイレクト
-        const admin = isTeamAdmin(state, state.user.currentTeamId);
-        router.push(admin ? '/admin' : '/dashboard');
+    const savedUser = localStorage.getItem('train_user');
+    if (savedUser) {
+      const u = JSON.parse(savedUser) as User;
+      setUser(u);
+      if (u.currentTeamId) {
+        // Simple role check for redirect (simplified, ideally re-fetch from API)
+        router.push(u.role === 'ADMIN' ? '/admin' : '/dashboard');
       }
     }
   }, [router]);
@@ -37,68 +37,81 @@ export default function LandingPage() {
     setIsLoading(true);
     setError('');
     try {
-      const state = loadState();
-      const user = createUser(name.trim());
-      const next = { ...state, user };
-      saveState(next);
-      setHasUser(true);
-    } catch {
-      setError('エラーが発生しました。もう一度お試しください。');
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), email: `${name.trim().toLowerCase()}@example.com` })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      localStorage.setItem('train_user', JSON.stringify(data));
+      setUser(data);
+    } catch (err: any) {
+      setError(err.message || 'エラーが発生しました。');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleCreateTeam = () => {
+  const handleCreateTeam = async () => {
     const n = teamName.trim();
-    if (!n) {
+    if (!n || !user) {
       setError('チーム名を入力してください');
       return;
     }
+    setIsLoading(true);
     setError('');
-    const next = createTeam(loadState(), n);
-    setTeamName('');
-    if (next.user?.currentTeamId) {
-      // チーム作成者は必ず Admin → /admin へ
-      router.push('/admin');
-    }
-  };
-
-  const handleJoinTeam = () => {
-    const code = joinCode.trim().toUpperCase();
-    // 6桁の英数字大文字（新形式）または旧形式（4〜6桁数字）を許容
-    if (!/^[A-Z0-9]{4,6}$/.test(code)) {
-      setError('参加コードは4〜6桁の英数字です');
-      return;
-    }
-    setError('');
-    const res = joinTeamByCode(loadState(), code);
-    if (res.error === 'invalid_code') {
-      setError('参加コードが見つかりません');
-      return;
-    }
-    setJoinCode('');
-    if (res.state.user?.currentTeamId) {
-      // ロールに基づいてリダイレクト
-      const admin = isTeamAdmin(res.state, res.state.user.currentTeamId);
-      router.push(admin ? '/admin' : '/dashboard');
-    }
-  };
-
-  const handleCopyCode = () => {
-    const state = loadState();
-    const team = getCurrentTeam(state);
-    if (team) {
-      navigator.clipboard.writeText(team.joinCode).then(() => {
-        setCopiedCode(true);
-        setTimeout(() => setCopiedCode(false), 2000);
+    try {
+      const res = await fetch('/api/teams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', name: n, userId: user.id })
       });
+      const team = await res.json();
+      if (team.error) throw new Error(team.error);
+
+      // Update local user session with currentTeamId
+      const updatedUser = { ...user, currentTeamId: team.id, role: 'ADMIN' as const };
+      localStorage.setItem('train_user', JSON.stringify(updatedUser));
+      setUser(updatedUser);
+      router.push('/admin');
+    } catch (err: any) {
+      setError(err.message || 'チームの作成に失敗しました。');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const state = hasUser ? loadState() : null;
-  const needsTeam = !!state?.user && !state.user.currentTeamId;
-  const currentTeam = state ? getCurrentTeam(state) : null;
+  const handleJoinTeam = async () => {
+    const code = joinCode.trim().toUpperCase();
+    if (!/^[A-Z0-9]{4,6}$/.test(code) || !user) {
+      setError('正しい参加コードを入力してください');
+      return;
+    }
+    setIsLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/teams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'join', joinCode: code, userId: user.id })
+      });
+      const team = await res.json();
+      if (team.error) throw new Error(team.error);
+
+      const updatedUser = { ...user, currentTeamId: team.id, role: 'MEMBER' as const };
+      localStorage.setItem('train_user', JSON.stringify(updatedUser));
+      setUser(updatedUser);
+      router.push('/dashboard');
+    } catch (err: any) {
+      setError(err.message || 'チームへの参加に失敗しました。');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const needsTeam = !!user && !user.currentTeamId;
 
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
@@ -123,7 +136,7 @@ export default function LandingPage() {
           <p className="text-slate-400 text-xs font-medium tracking-wide">チームの貢献を可視化。成長を加速する。</p>
         </div>
 
-        {!hasUser ? (
+        {!user ? (
           /* ── ステップ1: ユーザー名入力 ── */
           <form onSubmit={handleCreateUser} className="space-y-6">
             <div>
@@ -162,7 +175,7 @@ export default function LandingPage() {
           /* ── ステップ2: チーム作成 or 参加 ── */
           <div className="space-y-6">
             <p className="text-center text-xs font-bold text-slate-400">
-              ようこそ、<span className="text-white">{state?.user?.name}</span> さん！<br />
+              ようこそ、<span className="text-white">{user?.name}</span> さん！<br />
               チームを作成するか、参加コードで既存チームに参加してください。
             </p>
 

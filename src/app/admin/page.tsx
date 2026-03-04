@@ -6,20 +6,14 @@ import ProjectList from '../../components/shared/ProjectList';
 import ActivityLog from '../../components/shared/ActivityLog';
 import ChatBox from '../../components/shared/ChatBox';
 import CalendarView from '../../components/shared/CalendarView';
-import { TaskStatus, User, Project, ChatMessage, PointHistory } from '../../components/shared/types';
+import { TaskStatus, User, Project, ChatMessage, PointHistory, Team, Activity } from '../../components/shared/types';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy, TrendingUp, Users, Target, Layout, Calendar,
-  BarChart3, Copy, Check, KeyRound, Zap, Award, Clock
+  BarChart3, Copy, Check, KeyRound, Zap, Award, Clock, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  loadState, saveState, isTeamAdmin, getCurrentTeam,
-  projectsForCurrentTeam, addProject, addTaskToProject,
-  updateTaskStatus, pendingReviewCount, getTeamPointHistory,
-  getTeamPointSummary, getTeamMembers,
-} from '@/lib/trainState';
 
 type TabId = 'tasks' | 'calendar' | 'points';
 
@@ -28,7 +22,9 @@ export default function AdminPage() {
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [pointHistory, setPointHistory] = useState<PointHistory[]>([]);
   const [pointSummary, setPointSummary] = useState<
     { userId: number; userName: string; totalPoints: number; taskCount: number }[]
@@ -40,35 +36,80 @@ export default function AdminPage() {
   const [newProjectName, setNewProjectName] = useState('');
   const [localChat, setLocalChat] = useState<ChatMessage[]>([]);
   const [isAILoading, setIsAILoading] = useState(false);
-  const [isReady, setIsReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const syncFromStorage = useCallback(() => {
-    const state = loadState();
-    if (!state.user || !state.user.currentTeamId) {
+  const fetchData = useCallback(async () => {
+    const savedUser = localStorage.getItem('train_user');
+    if (!savedUser) {
       router.push('/');
       return;
     }
-    const teamId = state.user.currentTeamId;
-    if (!isTeamAdmin(state, teamId)) {
-      router.push('/dashboard');
+    const user = JSON.parse(savedUser) as User;
+    setCurrentUser(user);
+
+    if (!user.currentTeamId) {
+      router.push('/');
       return;
     }
-    setCurrentUser(state.user);
-    setProjects(projectsForCurrentTeam(state));
-    setTeamMembers(getTeamMembers(state, teamId));
-    setPointHistory(getTeamPointHistory(state));
-    setPointSummary(getTeamPointSummary(state));
-    setPendingCount(pendingReviewCount(state));
-    const team = getCurrentTeam(state);
-    setJoinCode(team?.joinCode ?? '');
-    setIsReady(true);
+
+    try {
+      const [projRes, teamRes, usersRes, actRes] = await Promise.all([
+        fetch(`/api/projects?teamId=${user.currentTeamId}`),
+        fetch(`/api/teams?userId=${user.id}`),
+        fetch(`/api/users`),
+        fetch(`/api/activity?teamId=${user.currentTeamId}`)
+      ]);
+
+      const projData = await projRes.json();
+      const teamsData = await teamRes.json();
+      const usersData = await usersRes.json();
+      const actData = await actRes.json();
+
+      if (!projData.error) setProjects(projData);
+      if (!teamsData.error) {
+        setTeams(teamsData);
+        const currentTeam = teamsData.find((t: any) => t.id === user.currentTeamId);
+        if (currentTeam) setJoinCode(currentTeam.joinCode);
+      }
+      if (!actData.error) setActivities(actData.map((a: any) => ({
+        id: a.id,
+        user: a.user.name,
+        avatar: a.user.avatar,
+        action: a.action,
+        target: a.target,
+        time: new Date(a.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        points: a.pointsEarned
+      })));
+
+      if (!usersData.error) {
+        setTeamMembers(usersData); // Simplified: show all users as potential team members for now
+
+        // Generate point summary from users
+        const summary = usersData.map((u: User) => ({
+          userId: u.id,
+          userName: u.name,
+          totalPoints: u.points,
+          taskCount: 0 // Need API update for task count
+        })).sort((a: any, b: any) => b.totalPoints - a.totalPoints);
+        setPointSummary(summary);
+      }
+
+      const count = projData.reduce((acc: number, p: Project) =>
+        acc + (p.tasks?.filter(t => t.status === 'in_review').length || 0), 0);
+      setPendingCount(count);
+
+    } catch (err) {
+      console.error('Admin page fetch error:', err);
+    } finally {
+      setIsLoading(false);
+    }
   }, [router]);
 
   useEffect(() => {
-    syncFromStorage();
-  }, [syncFromStorage]);
+    fetchData();
+  }, [fetchData]);
 
-  const handleTaskAction = (
+  const handleTaskAction = async (
     projectId: number,
     taskId: number,
     currentStatus: TaskStatus,
@@ -79,15 +120,19 @@ export default function AdminPage() {
     else if (currentStatus === 'todo' || currentStatus === 'in_progress') nextStatus = 'done';
     if (nextStatus === currentStatus) return;
 
-    const state = loadState();
-    const next = updateTaskStatus(state, projectId, taskId, nextStatus);
-    setProjects(projectsForCurrentTeam(next));
-    setPendingCount(pendingReviewCount(next));
-    setPointHistory(getTeamPointHistory(next));
-    setPointSummary(getTeamPointSummary(next));
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: taskId, status: nextStatus })
+      });
+      if (res.ok) fetchData();
+    } catch (err) {
+      console.error('Admin task action error:', err);
+    }
   };
 
-  const handleCreateTask = (
+  const handleCreateTask = async (
     projectId: number,
     title: string,
     points: number,
@@ -96,18 +141,46 @@ export default function AdminPage() {
     deadline?: string,
   ) => {
     if (!currentUser) return;
-    const state = loadState();
-    const next = addTaskToProject(state, projectId, title, points, deadline, category);
-    setProjects(projectsForCurrentTeam(next));
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          teamId: currentUser.currentTeamId,
+          title,
+          points,
+          createdByUserId: currentUser.id,
+          category,
+          deadline
+        })
+      });
+      if (res.ok) fetchData();
+    } catch (err) {
+      console.error('Admin create task error:', err);
+    }
   };
 
-  const handleCreateProject = () => {
+  const handleCreateProject = async () => {
     const name = newProjectName.trim();
     if (!name || !currentUser) return;
-    const state = loadState();
-    const next = addProject(state, name, '📁');
-    setProjects(projectsForCurrentTeam(next));
-    setNewProjectName('');
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          teamId: currentUser.currentTeamId,
+          createdByUserId: currentUser.id
+        })
+      });
+      if (res.ok) {
+        fetchData();
+        setNewProjectName('');
+      }
+    } catch (err) {
+      console.error('Admin create project error:', err);
+    }
   };
 
   const handleCopyCode = () => {
@@ -151,10 +224,13 @@ export default function AdminPage() {
     }
   };
 
-  if (!isReady || !currentUser) {
+  if (isLoading || !currentUser) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <p className="text-slate-400 text-sm font-bold animate-pulse">管理コンソールを同期中...</p>
+        <div className="text-center space-y-4">
+          <Sparkles className="w-8 h-8 text-indigo-500 animate-pulse mx-auto" />
+          <p className="text-slate-400 text-sm font-bold">管理コンソールを同期中...</p>
+        </div>
       </div>
     );
   }
@@ -174,8 +250,14 @@ export default function AdminPage() {
       <Header
         currentUser={currentUser}
         isAdmin={true}
+        teams={teams}
         pendingCount={pendingCount}
         onSwitchRole={() => router.push('/')}
+        onSwitchTeam={async (teamId) => {
+          const updatedUser = { ...currentUser, currentTeamId: teamId };
+          localStorage.setItem('train_user', JSON.stringify(updatedUser));
+          setCurrentUser(updatedUser);
+        }}
       />
 
       <main className="max-w-7xl mx-auto p-4 sm:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -480,7 +562,7 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <ActivityLog activities={[]} />
+          <ActivityLog activities={activities} />
         </div>
       </main>
     </div>
