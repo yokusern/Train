@@ -57,6 +57,7 @@ model teamMember {
   user     user     @relation(fields: [userId], references: [id], onDelete: Cascade)
   team     team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   role     Role     @default(MEMBER)
+  isActive Boolean  @default(true)
   joinedAt DateTime @default(now())
 
   @@id([userId, teamId])

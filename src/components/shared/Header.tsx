@@ -12,9 +12,13 @@ interface HeaderProps {
     pendingCount?: number;
     onSwitchRole: () => void;
     onSwitchTeam?: (teamId: number) => void;
+    onLeaveTeam?: (teamId: number) => Promise<void>;
 }
 
-export default function Header({ currentUser, isAdmin, teams = [], pendingCount = 0, onSwitchRole, onSwitchTeam }: HeaderProps) {
+export default function Header({ currentUser, isAdmin, teams = [], pendingCount = 0, onSwitchRole, onSwitchTeam, onLeaveTeam }: HeaderProps) {
+    const [isLeaving, setIsLeaving] = React.useState(false);
+    const [showLeaveConfirm, setShowLeaveConfirm] = React.useState(false);
+
     const handleLogout = () => {
         try {
             localStorage.removeItem('train_user');
@@ -74,6 +78,15 @@ export default function Header({ currentUser, isAdmin, teams = [], pendingCount 
                                 ))}
                             </select>
                         )}
+                        {currentUser.currentTeamId && (
+                            <button
+                                onClick={() => setShowLeaveConfirm(true)}
+                                className="ml-1 p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all text-[10px] font-black uppercase tracking-tighter"
+                                title="チームを脱退"
+                            >
+                                脱退
+                            </button>
+                        )}
                     </div>
                     {isAdmin && (
                         <div className="hidden sm:flex items-center gap-4 bg-slate-100 dark:bg-slate-800/50 px-4 py-2 rounded-2xl border border-slate-200 dark:border-white/5">
@@ -126,6 +139,56 @@ export default function Header({ currentUser, isAdmin, teams = [], pendingCount 
                     </div>
                 </div>
             </div>
+
+            {/* Leave Team Confirmation Modal */}
+            {showLeaveConfirm && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+                        onClick={() => !isLeaving && setShowLeaveConfirm(false)}
+                    />
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-white/10 p-8 shadow-2xl"
+                    >
+                        <h3 className="text-xl font-black text-slate-900 dark:text-white mb-4">チームを脱退しますか？</h3>
+                        <p className="text-sm text-slate-500 font-bold mb-6 leading-relaxed">
+                            チームから脱退しても、あなたのデータ（ポイントや貢献履歴）は保持されます。<br />
+                            <span className="text-indigo-500 mt-2 block italic">「チームコードを控えれば、後で再参加可能です」</span>
+                        </p>
+                        <div className="flex flex-col gap-3">
+                            <button
+                                disabled={isLeaving}
+                                onClick={async () => {
+                                    if (!onLeaveTeam || !currentUser.currentTeamId) return;
+                                    setIsLeaving(true);
+                                    try {
+                                        await onLeaveTeam(currentUser.currentTeamId);
+                                        setShowLeaveConfirm(false);
+                                    } catch (err: any) {
+                                        alert(err.message || 'エラーが発生しました');
+                                    } finally {
+                                        setIsLeaving(false);
+                                    }
+                                }}
+                                className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-black py-3 rounded-xl transition-all"
+                            >
+                                {isLeaving ? '処理中...' : 'チームを抜ける'}
+                            </button>
+                            <button
+                                disabled={isLeaving}
+                                onClick={() => setShowLeaveConfirm(false)}
+                                className="w-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-black py-3 rounded-xl transition-all"
+                            >
+                                キャンセル
+                            </button>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
         </header>
     );
 }

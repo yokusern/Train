@@ -6,7 +6,7 @@ import ProjectList from '../../components/shared/ProjectList';
 import ActivityLog from '../../components/shared/ActivityLog';
 import ChatBox from '../../components/shared/ChatBox';
 import CalendarView from '../../components/shared/CalendarView';
-import { TaskStatus, User, Project, ChatMessage, PointHistory, Team, Activity } from '../../components/shared/types';
+import { TaskStatus, User, Project, ChatMessage, PointHistory, Team, Activity, Role } from '../../components/shared/types';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -183,6 +183,39 @@ export default function AdminPage() {
     }
   };
 
+  const handleLeaveTeam = async (teamId: number) => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`/api/teams?userId=${currentUser.id}&teamId=${teamId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '脱退に失敗しました');
+
+      // Update local state and storage
+      const remainingTeams = teams.filter(t => t.id !== teamId);
+      const nextTeamId = remainingTeams.length > 0 ? remainingTeams[0].id : null;
+
+      const updatedUser = {
+        ...currentUser,
+        currentTeamId: nextTeamId,
+        role: (nextTeamId ? (remainingTeams[0].adminUserId === currentUser.id ? 'ADMIN' : 'MEMBER') : 'MEMBER') as Role
+      };
+
+      localStorage.setItem('train_user', JSON.stringify(updatedUser));
+      setCurrentUser(updatedUser);
+
+      if (!nextTeamId) {
+        router.push('/');
+      } else {
+        // Refresh data for the new team
+        fetchData();
+      }
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
   const handleCopyCode = () => {
     if (!joinCode) return;
     navigator.clipboard.writeText(joinCode).then(() => {
@@ -258,6 +291,7 @@ export default function AdminPage() {
           localStorage.setItem('train_user', JSON.stringify(updatedUser));
           setCurrentUser(updatedUser);
         }}
+        onLeaveTeam={handleLeaveTeam}
       />
 
       <main className="max-w-7xl mx-auto p-4 sm:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -489,6 +523,23 @@ export default function AdminPage() {
 
         {/* ── 右カラム（サイドバー） ── */}
         <div className="lg:col-span-1 space-y-6">
+          {/* Antigravity Trigger */}
+          <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm p-5 border-dashed border-indigo-500/30">
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="w-4 h-4 text-indigo-500 animate-pulse" />
+              <h3 className="font-black text-xs uppercase tracking-widest text-slate-400">研究開発: 無重力モード</h3>
+            </div>
+            <button
+              onClick={() => (window as any).activateAntigravity?.()}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-indigo-500/20"
+            >
+              Antigravity 起動
+            </button>
+            <p className="mt-2 text-[8px] text-slate-400 text-center font-bold">
+              ※物理演算により画面が崩壊します。リロードで修復。
+            </p>
+          </section>
+
           {/* 参加コード表示 */}
           <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm p-5">
             <div className="flex items-center gap-2 mb-4">

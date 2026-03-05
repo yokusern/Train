@@ -6,7 +6,7 @@ import ProjectList from '../../components/shared/ProjectList';
 import ActivityLog from '../../components/shared/ActivityLog';
 import ChatBox from '../../components/shared/ChatBox';
 import CalendarView from '../../components/shared/CalendarView';
-import { TaskStatus, User, Project, ChatMessage, Activity, Team } from '../../components/shared/types';
+import { TaskStatus, User, Project, ChatMessage, Activity, Team, Role } from '../../components/shared/types';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -151,6 +151,37 @@ export default function DashboardPage() {
         }
     };
 
+    const handleLeaveTeam = async (teamId: number) => {
+        if (!currentUser) return;
+        try {
+            const res = await fetch(`/api/teams?userId=${currentUser.id}&teamId=${teamId}`, {
+                method: 'DELETE'
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || '脱退に失敗しました');
+
+            const remainingTeams = teams.filter(t => t.id !== teamId);
+            const nextTeamId = remainingTeams.length > 0 ? remainingTeams[0].id : null;
+
+            const updatedUser = {
+                ...currentUser,
+                currentTeamId: nextTeamId,
+                role: (nextTeamId ? (remainingTeams[0].adminUserId === currentUser.id ? 'ADMIN' : 'MEMBER') : 'MEMBER') as Role
+            };
+
+            localStorage.setItem('train_user', JSON.stringify(updatedUser));
+            setCurrentUser(updatedUser);
+
+            if (!nextTeamId) {
+                router.push('/');
+            } else {
+                fetchData();
+            }
+        } catch (err: any) {
+            throw err;
+        }
+    };
+
     if (isLoading || !currentUser) return (
         <div className="min-h-screen bg-slate-950 flex items-center justify-center">
             <div className="text-center space-y-4">
@@ -175,6 +206,7 @@ export default function DashboardPage() {
                     localStorage.setItem('train_user', JSON.stringify(updatedUser));
                     setCurrentUser(updatedUser);
                 }}
+                onLeaveTeam={handleLeaveTeam}
             />
 
             <main className="max-w-7xl mx-auto p-4 sm:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8">

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Train, User as UserIcon, Sparkles, LogIn, Loader2, Users, KeyRound, Copy, Check } from 'lucide-react';
-import type { User, Team } from '@/components/shared/types';
+import type { User, Team, Role } from '@/components/shared/types';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -72,7 +72,7 @@ export default function LandingPage() {
       if (team.error) throw new Error(team.error);
 
       // Update local user session with currentTeamId
-      const updatedUser = { ...user, currentTeamId: team.id, role: 'ADMIN' as const };
+      const updatedUser = { ...user, currentTeamId: team.id, role: team.role as Role };
       localStorage.setItem('train_user', JSON.stringify(updatedUser));
       setUser(updatedUser);
       router.push('/admin');
@@ -100,7 +100,7 @@ export default function LandingPage() {
       const team = await res.json();
       if (team.error) throw new Error(team.error);
 
-      const updatedUser = { ...user, currentTeamId: team.id, role: 'MEMBER' as const };
+      const updatedUser = { ...user, currentTeamId: team.id, role: team.role as Role };
       localStorage.setItem('train_user', JSON.stringify(updatedUser));
       setUser(updatedUser);
       router.push('/dashboard');

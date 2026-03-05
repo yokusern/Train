@@ -19,7 +19,10 @@ export async function GET(req: Request) {
         const teamsRes = await (prisma as any).team.findMany({
             where: {
                 members: {
-                    some: { userId: parseInt(userId) }
+                    some: {
+                        userId: parseInt(userId),
+                        isActive: true
+                    }
                 }
             },
             include: {
@@ -65,7 +68,10 @@ export async function POST(req: Request) {
                     }
                 }
             });
-            return NextResponse.json(teamRes);
+            return NextResponse.json({
+                ...teamRes,
+                role: 'ADMIN'
+            });
         } else if (action === 'join') {
             if (!joinCode) return NextResponse.json({ error: 'Join code is required' }, { status: 400 });
 
@@ -84,20 +90,120 @@ export async function POST(req: Request) {
                         teamId: teamRes.id,
                     }
                 },
-                update: {},
+                update: {
+                    isActive: true, // Reactivate if previously left
+                },
                 create: {
                     userId: parseInt(userId),
                     teamId: teamRes.id,
                     role: 'MEMBER',
+                    isActive: true,
                 }
             });
 
-            return NextResponse.json(teamRes);
+            return NextResponse.json({
+                ...teamRes,
+                role: membership.role
+            });
         }
 
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     } catch (error: any) {
         console.error('Team action error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+// DELETE /api/teams - Leave a team
+export async function DELETE(req: Request) {
+    if (!process.env.DATABASE_URL) {
+        return NextResponse.json({ error: 'Database connection not available' }, { status: 503 });
+    }
+    try {
+        const { searchParams } = new URL(req.url);
+        const userId = searchParams.get('userId');
+        const teamId = searchParams.get('teamId');
+
+        if (!userId || !teamId || isNaN(parseInt(userId)) || isNaN(parseInt(teamId))) {
+            return NextResponse.json({ error: 'Valid userId and teamId are required' }, { status: 400 });
+        }
+
+        const uId = parseInt(userId);
+        const tId = parseInt(teamId);
+
+        // Check current membership and role
+        const membership = await (prisma as any).teamMember.findUnique({
+            where: { userId_teamId: { userId: uId, teamId: tId } }
+        });
+
+        if (!membership || !membership.isActive) {
+            return NextResponse.json({ error: 'Not a member of this team' }, { status: 404 });
+        }
+
+        // Admin validation: if leaving user is ADMIN, check if other active ADMINs exist
+        if (membership.role === 'ADMIN') {
+            const otherAdmins = await (prisma as any).teamMember.count({
+                where: {
+                    teamId: tId,
+                    role: 'ADMIN',
+                    isActive: true,
+                    userId: { not: uId }
+                }
+            });
+
+            if (otherAdmins === 0) {
+                return NextResponse.json({
+                    error: 'You are the only administrator. Please transfer admin rights or ensure another admin exists before leaving.'
+                }, { status: 403 });
+            }
+        }
+
+        // Perform "soft delete" (deactivate)
+        await (prisma as any).teamMember.update({
+            where: { userId_teamId: { userId: uId, teamId: tId } },
+            data: { isActive: false }
+        });
+
+        // Reassign team adminUserId if the leaving user was the primary admin
+        const team = await (prisma as any).team.findUnique({ where: { id: tId } });
+        if (team && team.adminUserId === uId) {
+            const nextAdmin = await (prisma as any).teamMember.findFirst({
+                where: {
+                    teamId: tId,
+                    role: 'ADMIN',
+                    isActive: true,
+                    userId: { not: uId }
+                }
+            });
+
+            if (nextAdmin) {
+                await (prisma as any).team.update({
+                    where: { id: tId },
+                    data: { adminUserId: nextAdmin.userId }
+                });
+            } else {
+                // If no other admin, but membership check passed, 
+                // it means there might be other members but no other admin.
+                // Reassign to the first active member found.
+                const nextMember = await (prisma as any).teamMember.findFirst({
+                    where: {
+                        teamId: tId,
+                        isActive: true,
+                        userId: { not: uId }
+                    }
+                });
+                if (nextMember) {
+                    await (prisma as any).team.update({
+                        where: { id: tId },
+                        data: { adminUserId: nextMember.userId }
+                    });
+                }
+            }
+        }
+
+        return NextResponse.json({ message: 'Successfully left the team' });
+    } catch (error: any) {
+        console.error('Leave team error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
