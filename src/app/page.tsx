@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { Train, User as UserIcon, Sparkles, LogIn, Loader2, Users, KeyRound, Copy, Check } from 'lucide-react';
 import type { User, Team, Role } from '@/components/shared/types';
 import { getStorageItem, setStorageItem } from '@/lib/storage';
+import { login, isAuthenticated } from '@/lib/auth';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -20,11 +21,13 @@ export default function LandingPage() {
 
   useEffect(() => {
     const u = getStorageItem<User>('user');
-    if (u) {
+    const auth = isAuthenticated();
+
+    if (u && auth) {
       setUser(u);
       if (u.currentTeamId) {
-        // Simple role check for redirect (simplified, ideally re-fetch from API)
-        router.push(u.role === 'ADMIN' ? '/admin' : '/dashboard');
+        const role = getStorageItem<string>('user_role');
+        router.push(role === 'ADMIN' ? '/admin' : '/dashboard');
       }
     }
     // Load recent codes from PERSISTENT storage (survives logout)
@@ -80,6 +83,9 @@ export default function LandingPage() {
       setStorageItem('user', updatedUser);
       setUser(updatedUser);
 
+      // ── New Requirement: Login tracking ──
+      login(team.joinCode, team.role);
+
       // Save code to PERSISTENT storage
       const codes = getStorageItem<string[]>('recent_codes', true) || [];
       if (!codes.includes(team.joinCode)) {
@@ -115,13 +121,16 @@ export default function LandingPage() {
       setStorageItem('user', updatedUser);
       setUser(updatedUser);
 
+      // ── New Requirement: Login tracking ──
+      login(code, team.role);
+
       // Save code to PERSISTENT storage
       const codes = getStorageItem<string[]>('recent_codes', true) || [];
       if (!codes.includes(code)) {
         setStorageItem('recent_codes', [code, ...codes].slice(0, 5), true);
       }
 
-      router.push('/dashboard');
+      router.push(team.role === 'ADMIN' ? '/admin' : '/dashboard');
     } catch (err: any) {
       setError(err.message || 'チームへの参加に失敗しました。');
     } finally {

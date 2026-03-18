@@ -46,7 +46,7 @@ const emptyState: TrainState = {
 export function loadState(): TrainState {
   if (typeof window === 'undefined') return emptyState;
   try {
-    const parsed = getStorageItem<any>(STORAGE_KEY);
+    const parsed = getStorageItem<any>(STORAGE_KEY, true); // true = persistent (train_ext_)
     if (!parsed || typeof parsed !== 'object') return emptyState;
     return {
       user: parsed.user ?? null,
@@ -62,8 +62,9 @@ export function loadState(): TrainState {
 
 export function saveState(state: TrainState) {
   if (typeof window === 'undefined') return;
-  setStorageItem(STORAGE_KEY, state);
+  setStorageItem(STORAGE_KEY, state, true); // true = persistent
 }
+
 
 
 // ─────────────────────────────────────────────

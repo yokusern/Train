@@ -111,6 +111,13 @@ export default function AdminPage() {
   }, [router]);
 
   useEffect(() => {
+    // 認証ガード: current_team_code がない場合は即座にリダイレクト
+    if (!isAuthenticated()) {
+      router.replace('/');
+    }
+  }, [router]);
+
+  useEffect(() => {
     fetchData();
   }, [fetchData]);
 

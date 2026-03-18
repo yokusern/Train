@@ -33,13 +33,16 @@ export default function DashboardPage() {
 
     useEffect(() => {
         if (!isAuthenticated()) {
-            router.push('/');
-            return;
+            router.replace('/');
         }
+    }, [router]);
+
+    useEffect(() => {
         const u = getStorageItem<User>('user');
         if (u) {
             setCurrentUser(u);
-        } else {
+        } else if (isAuthenticated()) {
+            // Re-fetch user if needed or push top
             router.push('/');
         }
     }, [router]);
