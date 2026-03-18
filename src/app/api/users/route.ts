@@ -33,12 +33,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 });
     }
 
+    // ログアウト/ログイン整合性のためのログ
+    console.log('[API/USERS] Upserting user:', { name: nameStr, email });
+
     const resUser = await (prisma as any).user.upsert({
-      where: { email },
+      where: { email: email },
       update: { name: nameStr },
       create: {
         name: nameStr,
-        email,
+        email: email,
         avatar: nameStr.slice(0, 2).toUpperCase(),
         role: 'MEMBER',
         skillScore: {},
