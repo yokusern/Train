@@ -1,5 +1,5 @@
 export type Role = 'MEMBER' | 'ADMIN';
-export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done';
+export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'WAITING_APPROVAL' | 'done';
 
 export interface User {
     id: number;

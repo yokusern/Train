@@ -76,7 +76,7 @@ export default function DashboardPage() {
 
             // Simplified pending count from projects
             const count = projData.reduce((acc: number, p: Project) =>
-                acc + (p.tasks?.filter(t => t.status === 'in_review').length || 0), 0);
+                acc + (p.tasks?.filter(t => t.status === 'WAITING_APPROVAL' || t.status === 'in_review').length || 0), 0);
             setPendingCount(count);
         } catch (err) {
             console.error('Fetch dashboard data error:', err);
@@ -97,7 +97,7 @@ export default function DashboardPage() {
 
         let nextStatus: TaskStatus = currentStatus;
         if (currentStatus === 'todo') nextStatus = 'in_progress';
-        else if (currentStatus === 'in_progress') nextStatus = 'in_review';
+        else if (currentStatus === 'in_progress') nextStatus = 'WAITING_APPROVAL';
 
         if (nextStatus === currentStatus) return;
 

@@ -25,7 +25,7 @@ interface ProjectListProps {
     currentUser: User;
     team: User[];
     onTaskAction: (projectId: number, taskId: number, currentStatus: TaskStatus, points: number, currentAssignee: number | null, category?: string) => void;
-    onCreateTask: (projectId: number, title: string, points: number, assigneeId: number | null, category?: string) => void;
+    onCreateTask: (projectId: number, title: string, points: number, assigneeId: number | null, deadline?: string, category?: string) => void;
 }
 
 export default function ProjectList({ projects, isAdmin, currentUser, team, onTaskAction, onCreateTask }: ProjectListProps) {
@@ -33,6 +33,7 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
     const [isAddingTask, setIsAddingTask] = useState<number | null>(null);
     const [newTaskTitle, setNewTaskTitle] = useState('');
     const [newTaskPoints, setNewTaskPoints] = useState<number>(50);
+    const [newTaskDeadline, setNewTaskDeadline] = useState('');
 
     const toggleProject = (id: number) => {
         setExpandedProjects(prev =>
@@ -44,7 +45,8 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
         switch (status) {
             case 'done': return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
             case 'in_progress': return <Clock className="w-4 h-4 text-indigo-500 animate-pulse" />;
-            case 'in_review': return <AlertCircle className="w-4 h-4 text-amber-500" />;
+            case 'in_review':
+            case 'WAITING_APPROVAL': return <AlertCircle className="w-4 h-4 text-amber-500" />;
             default: return <div className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-600" />;
         }
     };
@@ -53,7 +55,8 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
         switch (status) {
             case 'done': return '完了済';
             case 'in_progress': return '進行中';
-            case 'in_review': return '承認待';
+            case 'in_review':
+            case 'WAITING_APPROVAL': return '承認待';
             default: return '未着手';
         }
     };
@@ -62,9 +65,25 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
         switch (status) {
             case 'done': return 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20';
             case 'in_progress': return 'bg-indigo-50 text-indigo-700 border-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20';
-            case 'in_review': return 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20';
+            case 'in_review':
+            case 'WAITING_APPROVAL': return 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20';
             default: return 'bg-slate-50 text-slate-600 border-slate-100 dark:bg-slate-800 dark:text-slate-400 dark:border-white/5';
         }
+    };
+
+    const getDeadlineColor = (deadline: string | undefined) => {
+        if (!deadline) return 'text-slate-400';
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const due = new Date(deadline);
+        due.setHours(0, 0, 0, 0);
+
+        const diffTime = due.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays <= 0) return 'text-rose-500 font-bold';
+        if (diffDays <= 3) return 'text-orange-500 font-bold';
+        return 'text-slate-400';
     };
 
     return (
@@ -126,7 +145,12 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                                 <motion.div
                                                     key={task.id}
                                                     layout
-                                                    className="group flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all border border-transparent hover:border-slate-100 dark:hover:border-white/5"
+                                                    className={cn(
+                                                        "group flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all border",
+                                                        task.status !== 'done' && task.deadline && getDeadlineColor(task.deadline).includes('text-rose-500')
+                                                            ? "border-rose-500/30 bg-rose-500/5"
+                                                            : "border-transparent hover:border-slate-100 dark:hover:border-white/5"
+                                                    )}
                                                 >
                                                     <div className="flex items-center gap-4 flex-1">
                                                         <button
@@ -162,6 +186,11 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                                                         担当: {assignee.name}
                                                                     </span>
                                                                 )}
+                                                                {task.deadline && (
+                                                                    <span className={cn("flex items-center gap-1 font-bold", getDeadlineColor(task.deadline))}>
+                                                                        <Calendar className="w-3 h-3" /> 期限: {task.deadline}
+                                                                    </span>
+                                                                )}
                                                                 {isAdmin && (
                                                                     <span className="flex items-center gap-1 font-bold text-indigo-500 uppercase tracking-wider">
                                                                         <Award className="w-3 h-3" /> {task.points} pts
@@ -189,7 +218,7 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                                             </div>
                                                         )}
 
-                                                        {(!isAdmin && task.status !== 'done' && task.status !== 'in_review') && (
+                                                        {(!isAdmin && task.status !== 'done' && task.status !== 'in_review' && task.status !== 'WAITING_APPROVAL') && (
                                                             <button
                                                                 onClick={() => onTaskAction(project.id, task.id, task.status, task.points, task.assigneeId)}
                                                                 className="p-1 px-3 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all flex items-center gap-2"
@@ -199,7 +228,7 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                                             </button>
                                                         )}
 
-                                                        {isAdmin && task.status === 'in_review' && (
+                                                        {isAdmin && (task.status === 'in_review' || task.status === 'WAITING_APPROVAL') && (
                                                             <button
                                                                 onClick={() => onTaskAction(project.id, task.id, task.status, task.points, task.assigneeId)}
                                                                 className="p-1 px-3 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all"
@@ -227,12 +256,18 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                                         autoFocus
                                                         type="text"
                                                         placeholder="タスク名"
-                                                        className="sm:col-span-4 w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner"
+                                                        className="sm:col-span-2 w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner"
                                                         value={newTaskTitle}
                                                         onChange={(e) => setNewTaskTitle(e.target.value)}
                                                         onKeyDown={(e) => {
                                                             if (e.key === 'Escape') setIsAddingTask(null);
                                                         }}
+                                                    />
+                                                    <input
+                                                        type="date"
+                                                        className="sm:col-span-2 w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl p-3 text-xs focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner text-slate-500"
+                                                        value={newTaskDeadline}
+                                                        onChange={(e) => setNewTaskDeadline(e.target.value)}
                                                     />
                                                     <input
                                                         type="number"
@@ -243,9 +278,6 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                                         className="sm:col-span-1 w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner"
                                                         value={Number.isFinite(newTaskPoints) ? newTaskPoints : 0}
                                                         onChange={(e) => setNewTaskPoints(Number(e.target.value))}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Escape') setIsAddingTask(null);
-                                                        }}
                                                     />
                                                 </div>
                                                 <div className="mt-3 flex items-center justify-end gap-2">
@@ -261,9 +293,10 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                                         disabled={!newTaskTitle.trim()}
                                                         onClick={() => {
                                                             const points = Number.isFinite(newTaskPoints) ? Math.max(0, Math.floor(newTaskPoints)) : 0;
-                                                            onCreateTask(project.id, newTaskTitle.trim(), points, null);
+                                                            onCreateTask(project.id, newTaskTitle.trim(), points, null, newTaskDeadline || undefined, undefined);
                                                             setNewTaskTitle('');
                                                             setNewTaskPoints(50);
+                                                            setNewTaskDeadline('');
                                                             setIsAddingTask(null);
                                                         }}
                                                         className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest bg-indigo-600 text-white disabled:opacity-40 hover:bg-indigo-500 transition-colors"

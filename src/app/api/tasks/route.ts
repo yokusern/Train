@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   }
   try {
     const body = await req.json().catch(() => null);
-    const { projectId, teamId, title, points, createdByUserId, deadline, category } = body || {};
+    const { projectId, teamId, title, points, createdByUserId, deadline, category, assigneeId } = body || {};
 
     if (!projectId || !teamId || !title || !createdByUserId || isNaN(parseInt(projectId)) || isNaN(parseInt(teamId)) || isNaN(parseInt(createdByUserId))) {
       return NextResponse.json({ error: 'Valid projectId, teamId, title, and createdByUserId are required' }, { status: 400 });
@@ -23,6 +23,7 @@ export async function POST(req: Request) {
         projectId: parseInt(projectId),
         teamId: parseInt(teamId),
         createdByUserId: parseInt(createdByUserId),
+        assigneeId: assigneeId ? parseInt(assigneeId) : null,
         deadline: deadline ? new Date(deadline) : null,
         category,
       },
@@ -49,13 +50,50 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'Valid id is required' }, { status: 400 });
     }
 
+    const taskIdInt = parseInt(id);
     const updateData: any = {};
     if (status) updateData.status = status;
     if (assigneeId) updateData.assigneeId = parseInt(assigneeId);
-    if (status === 'done') updateData.completedAt = new Date();
 
+    // If marking as done, handle points and logs
+    if (status === 'done') {
+      const currentTask = await (prisma as any).task.findUnique({
+        where: { id: taskIdInt }
+      });
+
+      if (!currentTask) {
+        return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+      }
+
+      // Avoid double-awarding points
+      if (currentTask.status !== 'done' && currentTask.assigneeId) {
+        const [taskRes] = await (prisma as any).$transaction([
+          (prisma as any).task.update({
+            where: { id: taskIdInt },
+            data: { ...updateData, completedAt: new Date() },
+          }),
+          (prisma as any).user.update({
+            where: { id: currentTask.assigneeId },
+            data: { points: { increment: currentTask.points } }
+          }),
+          (prisma as any).activityLog.create({
+            data: {
+              userId: currentTask.assigneeId,
+              teamId: currentTask.teamId,
+              projectId: currentTask.projectId,
+              action: 'completed',
+              target: currentTask.title,
+              pointsEarned: currentTask.points,
+            }
+          })
+        ]);
+        return NextResponse.json(taskRes);
+      }
+    }
+
+    // Normal update
     const taskRes = await (prisma as any).task.update({
-      where: { id: parseInt(id) },
+      where: { id: taskIdInt },
       data: updateData,
     });
 

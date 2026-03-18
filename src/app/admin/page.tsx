@@ -100,7 +100,7 @@ export default function AdminPage() {
       }
 
       const count = projData.reduce((acc: number, p: Project) =>
-        acc + (p.tasks?.filter(t => t.status === 'in_review').length || 0), 0);
+        acc + (p.tasks?.filter(t => t.status === 'WAITING_APPROVAL' || t.status === 'in_review').length || 0), 0);
       setPendingCount(count);
 
     } catch (err) {
@@ -128,7 +128,7 @@ export default function AdminPage() {
   ) => {
     if (!currentUser) return;
     let nextStatus: TaskStatus = currentStatus;
-    if (currentStatus === 'in_review') nextStatus = 'done';
+    if (currentStatus === 'in_review' || currentStatus === 'WAITING_APPROVAL') nextStatus = 'done';
     else if (currentStatus === 'todo' || currentStatus === 'in_progress') nextStatus = 'done';
     if (nextStatus === currentStatus) return;
 
@@ -148,9 +148,9 @@ export default function AdminPage() {
     projectId: number,
     title: string,
     points: number,
-    _assigneeId: number | null,
-    category?: string,
+    assigneeId: number | null,
     deadline?: string,
+    category?: string,
   ) => {
     if (!currentUser) return;
     try {
@@ -163,6 +163,7 @@ export default function AdminPage() {
           title,
           points,
           createdByUserId: currentUser.id,
+          assigneeId,
           category,
           deadline
         })
