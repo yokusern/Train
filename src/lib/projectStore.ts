@@ -3,7 +3,6 @@
 import type { Project, Task, TaskStatus } from '@/components/shared/types';
 import { loadState, saveState, TrainState } from './trainState';
 
-const STORAGE_KEY = 'train_state_v2';
 
 export function loadProjects(): Project[] {
   const state = loadState();

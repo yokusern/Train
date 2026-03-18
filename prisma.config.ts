@@ -1,6 +1,8 @@
-export default {
-    earlyAdopter: true,
-    datasource: {
-        url: process.env.DATABASE_URL,
-    },
-}
+/** @type {import("next").NextConfig} */
+const nextConfig = {
+  experimental: {
+    serverComponentsExternalPackages: ["@prisma/client", "prisma"],
+  },
+};
+
+module.exports = nextConfig;

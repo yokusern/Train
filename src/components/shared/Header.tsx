@@ -5,6 +5,8 @@ import { motion } from 'framer-motion';
 import { LogOut, Bell, Award, Train } from 'lucide-react';
 import { User, Team } from './types';
 
+import { logout } from '@/lib/auth';
+
 interface HeaderProps {
     currentUser: User;
     isAdmin: boolean;
@@ -19,14 +21,10 @@ export default function Header({ currentUser, isAdmin, teams = [], pendingCount 
     const [isLeaving, setIsLeaving] = React.useState(false);
     const [showLeaveConfirm, setShowLeaveConfirm] = React.useState(false);
 
-    const handleLogout = () => {
-        try {
-            localStorage.removeItem('train_user');
-        } catch {
-            // ignore
-        }
-        onSwitchRole();
+    const handleLogout = async () => {
+        await logout();
     };
+
 
     return (
         <header className="sticky top-0 z-50 w-full border-b border-white/10 glass">

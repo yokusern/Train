@@ -2,9 +2,13 @@
 
 import type { User, Project, Task, TaskStatus, Role, TeamMember, PointHistory } from '@/components/shared/types';
 
+import { getStorageItem, setStorageItem } from './storage';
+
 // ─────────────────────────────────────────────
 // 型定義
 // ─────────────────────────────────────────────
+
+export { logout, isAuthenticated } from './auth';
 
 export type Team = {
   id: number;
@@ -25,7 +29,7 @@ export type TrainState = {
 // ストレージキー
 // ─────────────────────────────────────────────
 
-const STORAGE_KEY = 'train_state_v3';
+const STORAGE_KEY = 'state_v3'; // 'train_' prefix is handled by storage.ts
 
 const emptyState: TrainState = {
   user: null,
@@ -42,9 +46,7 @@ const emptyState: TrainState = {
 export function loadState(): TrainState {
   if (typeof window === 'undefined') return emptyState;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return emptyState;
-    const parsed = JSON.parse(raw);
+    const parsed = getStorageItem<any>(STORAGE_KEY);
     if (!parsed || typeof parsed !== 'object') return emptyState;
     return {
       user: parsed.user ?? null,
@@ -60,8 +62,9 @@ export function loadState(): TrainState {
 
 export function saveState(state: TrainState) {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  setStorageItem(STORAGE_KEY, state);
 }
+
 
 // ─────────────────────────────────────────────
 // ユーザー作成

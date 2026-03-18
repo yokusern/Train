@@ -11,6 +11,8 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Sparkles, Layout, Calendar } from 'lucide-react';
+import { getStorageItem, setStorageItem } from '@/lib/storage';
+import { isAuthenticated } from '@/lib/auth';
 
 export default function DashboardPage() {
     const router = useRouter();
@@ -30,9 +32,13 @@ export default function DashboardPage() {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const savedUser = localStorage.getItem('train_user');
-        if (savedUser) {
-            setCurrentUser(JSON.parse(savedUser));
+        if (!isAuthenticated()) {
+            router.push('/');
+            return;
+        }
+        const u = getStorageItem<User>('user');
+        if (u) {
+            setCurrentUser(u);
         } else {
             router.push('/');
         }
@@ -169,7 +175,7 @@ export default function DashboardPage() {
                 role: (nextTeamId ? (remainingTeams[0].adminUserId === currentUser.id ? 'ADMIN' : 'MEMBER') : 'MEMBER') as Role
             };
 
-            localStorage.setItem('train_user', JSON.stringify(updatedUser));
+            setStorageItem('user', updatedUser);
             setCurrentUser(updatedUser);
 
             if (!nextTeamId) {
@@ -203,7 +209,7 @@ export default function DashboardPage() {
                 onSwitchRole={() => router.push('/')}
                 onSwitchTeam={async (teamId) => {
                     const updatedUser = { ...currentUser, currentTeamId: teamId };
-                    localStorage.setItem('train_user', JSON.stringify(updatedUser));
+                    setStorageItem('user', updatedUser);
                     setCurrentUser(updatedUser);
                 }}
                 onLeaveTeam={handleLeaveTeam}

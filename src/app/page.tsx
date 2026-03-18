@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Train, User as UserIcon, Sparkles, LogIn, Loader2, Users, KeyRound, Copy, Check } from 'lucide-react';
 import type { User, Team, Role } from '@/components/shared/types';
+import { getStorageItem, setStorageItem } from '@/lib/storage';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -12,20 +13,23 @@ export default function LandingPage() {
   const [teamName, setTeamName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [user, setUser] = useState<User | null>(null);
+  const [recentCodes, setRecentCodes] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [copiedCode, setCopiedCode] = useState(false);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('train_user');
-    if (savedUser) {
-      const u = JSON.parse(savedUser) as User;
+    const u = getStorageItem<User>('user');
+    if (u) {
       setUser(u);
       if (u.currentTeamId) {
         // Simple role check for redirect (simplified, ideally re-fetch from API)
         router.push(u.role === 'ADMIN' ? '/admin' : '/dashboard');
       }
     }
+    // Load recent codes from PERSISTENT storage (survives logout)
+    const codes = getStorageItem<string[]>('recent_codes', true) || [];
+    setRecentCodes(codes);
   }, [router]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -45,7 +49,7 @@ export default function LandingPage() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      localStorage.setItem('train_user', JSON.stringify(data));
+      setStorageItem('user', data);
       setUser(data);
     } catch (err: any) {
       setError(err.message || 'エラーが発生しました。');
@@ -73,8 +77,15 @@ export default function LandingPage() {
 
       // Update local user session with currentTeamId
       const updatedUser = { ...user, currentTeamId: team.id, role: team.role as Role };
-      localStorage.setItem('train_user', JSON.stringify(updatedUser));
+      setStorageItem('user', updatedUser);
       setUser(updatedUser);
+
+      // Save code to PERSISTENT storage
+      const codes = getStorageItem<string[]>('recent_codes', true) || [];
+      if (!codes.includes(team.joinCode)) {
+        setStorageItem('recent_codes', [team.joinCode, ...codes].slice(0, 5), true);
+      }
+
       router.push('/admin');
     } catch (err: any) {
       setError(err.message || 'チームの作成に失敗しました。');
@@ -101,8 +112,15 @@ export default function LandingPage() {
       if (team.error) throw new Error(team.error);
 
       const updatedUser = { ...user, currentTeamId: team.id, role: team.role as Role };
-      localStorage.setItem('train_user', JSON.stringify(updatedUser));
+      setStorageItem('user', updatedUser);
       setUser(updatedUser);
+
+      // Save code to PERSISTENT storage
+      const codes = getStorageItem<string[]>('recent_codes', true) || [];
+      if (!codes.includes(code)) {
+        setStorageItem('recent_codes', [code, ...codes].slice(0, 5), true);
+      }
+
       router.push('/dashboard');
     } catch (err: any) {
       setError(err.message || 'チームへの参加に失敗しました。');
@@ -227,8 +245,23 @@ export default function LandingPage() {
                     参加
                   </button>
                 </div>
+                {recentCodes.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <p className="text-[10px] font-bold text-slate-500 w-full mb-1 uppercase tracking-tighter">履歴から選択:</p>
+                    {recentCodes.map(c => (
+                      <button
+                        key={c}
+                        onClick={() => setJoinCode(c)}
+                        className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-[10px] font-black text-purple-400 hover:bg-purple-500/10 hover:border-purple-500/30 transition-all"
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
+
 
             {error && <p className="text-xs font-bold text-rose-500 text-center">{error}</p>}
           </div>
@@ -238,12 +271,13 @@ export default function LandingPage() {
             <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mx-auto" />
             <p className="text-slate-400 text-sm font-bold">リダイレクト中...</p>
           </div>
-        )}
+        )
+        }
 
         <div className="mt-10 flex items-center justify-center gap-2 text-[10px] font-black text-slate-700 uppercase tracking-[0.2em]">
           <Sparkles className="w-3 h-3 text-indigo-500" /> Powered by Gemini AI
         </div>
-      </motion.div>
-    </div>
+      </motion.div >
+    </div >
   );
 }

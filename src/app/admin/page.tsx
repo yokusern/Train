@@ -14,6 +14,8 @@ import {
   BarChart3, Copy, Check, KeyRound, Zap, Award, Clock, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getStorageItem, setStorageItem } from '@/lib/storage';
+import { isAuthenticated } from '@/lib/auth';
 
 type TabId = 'tasks' | 'calendar' | 'points';
 
@@ -39,12 +41,15 @@ export default function AdminPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
-    const savedUser = localStorage.getItem('train_user');
-    if (!savedUser) {
+    if (!isAuthenticated()) {
       router.push('/');
       return;
     }
-    const user = JSON.parse(savedUser) as User;
+    const user = getStorageItem<User>('user');
+    if (!user) {
+      router.push('/');
+      return;
+    }
     setCurrentUser(user);
 
     if (!user.currentTeamId) {
@@ -202,7 +207,7 @@ export default function AdminPage() {
         role: (nextTeamId ? (remainingTeams[0].adminUserId === currentUser.id ? 'ADMIN' : 'MEMBER') : 'MEMBER') as Role
       };
 
-      localStorage.setItem('train_user', JSON.stringify(updatedUser));
+      setStorageItem('user', updatedUser);
       setCurrentUser(updatedUser);
 
       if (!nextTeamId) {
@@ -288,7 +293,7 @@ export default function AdminPage() {
         onSwitchRole={() => router.push('/')}
         onSwitchTeam={async (teamId) => {
           const updatedUser = { ...currentUser, currentTeamId: teamId };
-          localStorage.setItem('train_user', JSON.stringify(updatedUser));
+          setStorageItem('user', updatedUser);
           setCurrentUser(updatedUser);
         }}
         onLeaveTeam={handleLeaveTeam}
