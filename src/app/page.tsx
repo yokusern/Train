@@ -47,7 +47,10 @@ export default function LandingPage() {
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), email: `${name.trim().toLowerCase()}@example.com` })
+        body: JSON.stringify({
+          name: name.trim(),
+          email: name.trim().includes('@') ? name.trim() : `${name.trim().toLowerCase()}@example.com`
+        })
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
