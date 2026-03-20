@@ -44,3 +44,7 @@ next-env.d.ts
 Train.zip
 src/lib/prisma.ts
 .env*.local
+
+# database
+*.db
+*.db-journal
