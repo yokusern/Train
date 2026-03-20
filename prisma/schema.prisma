@@ -3,21 +3,22 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
 }
 
-enum Role {
-  MEMBER
-  ADMIN
-}
+// SQLite fallback: Enums converted to String
+// enum Role {
+//   MEMBER
+//   ADMIN
+// }
 
-enum TaskStatus {
-  todo
-  in_progress
-  in_review
-  WAITING_APPROVAL
-  done
-}
+// enum TaskStatus {
+//   todo
+//   in_progress
+//   in_review
+//   WAITING_APPROVAL
+//   done
+// }
 
 model user {
   id             Int          @id @default(autoincrement())
@@ -27,7 +28,7 @@ model user {
   points         Int          @default(0)
   pendingPoints  Int          @default(0)
   rank           String       @default("Rookie")
-  role           Role         @default(MEMBER)
+  role           String       @default("MEMBER")
   skillScore     Json?        // e.g., {"Development": 1500}
   currentTeamId  Int?
   joinedTeams    teamMember[]
@@ -57,7 +58,7 @@ model teamMember {
   teamId   Int
   user     user     @relation(fields: [userId], references: [id], onDelete: Cascade)
   team     team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  role     Role     @default(MEMBER)
+  role     String     @default("MEMBER")
   isActive Boolean  @default(true)
   joinedAt DateTime @default(now())
 
@@ -86,7 +87,7 @@ model task {
   projectId       Int
   project         project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   title           String
-  status          TaskStatus   @default(todo)
+  status          String       @default("todo")
   points          Int          @default(10)
   assigneeId      Int?
   assignee        user?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
