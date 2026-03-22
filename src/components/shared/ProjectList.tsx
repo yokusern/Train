@@ -188,7 +188,7 @@ export default function ProjectList({ projects, isAdmin, currentUser, team, onTa
                                                                 )}
                                                                 {task.deadline && (
                                                                     <span className={cn("flex items-center gap-1 font-bold", getDeadlineColor(task.deadline))}>
-                                                                        <Calendar className="w-3 h-3" /> 期限: {task.deadline}
+                                                                        <Calendar className="w-3 h-3" /> 期限: {new Date(task.deadline).toLocaleDateString()}
                                                                     </span>
                                                                 )}
                                                                 {isAdmin && (
